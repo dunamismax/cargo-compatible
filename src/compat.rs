@@ -6,11 +6,17 @@ use crate::model::{
 use anyhow::{anyhow, Result};
 use semver::Version;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use tracing::{debug, info};
 
 pub fn analyze_current_workspace(
     workspace: &WorkspaceData,
     selection: &Selection,
 ) -> Result<ScanReport> {
+    info!(
+        workspace_root = %workspace.workspace_root.display(),
+        selected_members = selection.members.len(),
+        "analyzing workspace compatibility"
+    );
     let mut issues_by_id: BTreeMap<String, PackageIssue> = BTreeMap::new();
     let mut incompatible_counts: BTreeMap<String, usize> = BTreeMap::new();
     let mut unknown_counts: BTreeMap<String, usize> = BTreeMap::new();
@@ -136,6 +142,13 @@ pub fn analyze_current_workspace(
         })
         .collect::<Vec<_>>();
     package_summaries.sort_by(|left, right| left.package_name.cmp(&right.package_name));
+
+    debug!(
+        incompatible_packages = incompatible_packages.len(),
+        unknown_packages = unknown_packages.len(),
+        package_summaries = package_summaries.len(),
+        "completed workspace compatibility analysis"
+    );
 
     Ok(ScanReport {
         target: selection.target.clone(),

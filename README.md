@@ -136,10 +136,41 @@ The JSON reports are intentionally structured around stable sections instead of 
 
 ## Development
 
+Install the cargo subcommands used by CI if you do not already have them:
+
+```bash
+cargo install cargo-deny --locked
+cargo install cargo-nextest --locked
+```
+
+The test and verification stack now includes:
+
+- `proptest` invariants for semver candidate selection and resolution-diff behavior
+- `cargo-nextest` for the main integration and property test suite
+- `cargo-deny` for advisory, license, and source-policy checks
+- `criterion` for a synthetic large-workspace resolver benchmark
+
+Run the standard local verification commands with:
+
 ```bash
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
+cargo nextest run
+cargo deny check
+cargo bench --bench large_workspace_resolver --no-run
+```
+
+Run the full resolver benchmark locally with:
+
+```bash
+cargo bench --bench large_workspace_resolver
+```
+
+Tracing is opt-in and uses standard `RUST_LOG` filtering:
+
+```bash
+RUST_LOG=cargo_compatible=debug cargo compatible scan --workspace
 ```
 
 ## License

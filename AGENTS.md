@@ -23,17 +23,21 @@ This file is concise repo memory for future agents and developers. `BUILD.md` is
 - `src/temp_workspace.rs`
   - Safe workspace copy logic for dry-run resolution experiments
 - `src/index.rs`
-  - crates.io sparse-index cache lookup and compatible candidate selection for manifest suggestions
+  - crates.io sparse-index cache lookup, compatible candidate selection, and semver/property-test invariants
 - `src/manifest_edit.rs`
   - Direct dependency inspection, conservative suggestion generation, and minimal TOML edits
 - `src/explain.rs`
   - Per-package explanation assembly and blocker classification
 - `src/report.rs`
   - Human, JSON, and Markdown report rendering
+- `benches/large_workspace_resolver.rs`
+  - Criterion benchmark that generates large path-only workspaces and measures `build_candidate_resolution`
 - `tests/integration_cli.rs`
   - Real CLI integration coverage and snapshot tests over fixture workspaces
 - `tests/version_selection.rs`
   - Unit coverage for registry candidate selection rules
+- `deny.toml`
+  - Cargo-deny policy for advisories, licenses, bans, and allowed sources
 - `tests/fixtures/*`
   - Deterministic sample workspaces for missing rust-version, mixed-workspace, path dependency, and resolver-guidance cases
 
@@ -42,9 +46,11 @@ This file is concise repo memory for future agents and developers. `BUILD.md` is
 - Missing dependency `rust-version` metadata is treated as unknown, never automatically compatible.
 - `scan` and `resolve` are dry-run-first workflows by design.
 - `resolve` uses a temporary workspace copy instead of mutating the real checkout.
+- Tracing is opt-in through `RUST_LOG`; normal command output remains unchanged unless tracing is enabled.
 - Manifest suggestions intentionally prefer conservative no-op behavior when registry cache data is missing or the dependency is non-registry.
 - Output ordering is deterministic to keep human reports and snapshots stable.
 - Path and git dependencies are analyzed and explained, but they do not receive bogus crates.io downgrade suggestions.
+- `cargo-deny` currently passes with duplicate-version warnings from transitive dependencies; CI treats them as warnings, not failures.
 
 ## Verified Commands
 
@@ -52,6 +58,9 @@ This file is concise repo memory for future agents and developers. `BUILD.md` is
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
+cargo nextest run
+~/.cargo/bin/cargo-deny check
+cargo bench --bench large_workspace_resolver --no-run
 cargo run -- --help
 cargo run -- scan --manifest-path tests/fixtures/path-too-new/Cargo.toml
 cargo run -- explain too_new --manifest-path tests/fixtures/path-too-new/Cargo.toml
@@ -64,6 +73,7 @@ cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.
 - Manifest suggestion logic is strongest for normal direct crates.io dependencies and only uses the local sparse index cache.
 - Feature validation is conservative and not a complete reimplementation of Cargo feature resolution semantics.
 - Mixed-workspace reasoning is explanatory rather than prescriptive; this version does not auto-edit `workspace.resolver = "3"`.
+- The Criterion benchmark is intentionally synthetic and path-only; it tracks large-workspace resolver overhead without exercising networked registry traffic.
 
 ## Working Agreement
 

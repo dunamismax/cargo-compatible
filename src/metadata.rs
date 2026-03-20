@@ -10,8 +10,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use toml_edit::DocumentMut;
+use tracing::{debug, info};
 
 pub fn load_workspace(manifest_path: Option<&Path>) -> Result<WorkspaceData> {
+    debug!(manifest_path = ?manifest_path, "loading cargo metadata");
     let mut command = MetadataCommand::new();
     if let Some(path) = manifest_path {
         command.manifest_path(path);
@@ -38,6 +40,15 @@ pub fn load_workspace(manifest_path: Option<&Path>) -> Result<WorkspaceData> {
         .collect::<Result<BTreeMap<_, _>>>()?;
     let graph = resolve_graph(&metadata)?;
 
+    info!(
+        workspace_root = %workspace_root.display(),
+        packages = metadata.packages.len(),
+        workspace_members = metadata.workspace_members.len(),
+        is_virtual_workspace,
+        resolver = ?resolver,
+        "loaded workspace metadata"
+    );
+
     Ok(WorkspaceData {
         workspace_root,
         workspace_manifest,
@@ -51,6 +62,13 @@ pub fn load_workspace(manifest_path: Option<&Path>) -> Result<WorkspaceData> {
 }
 
 pub fn select_packages(workspace: &WorkspaceData, args: &SelectionArgs) -> Result<Selection> {
+    debug!(
+        manifest_path = ?args.manifest_path,
+        workspace = args.workspace,
+        packages = ?args.package,
+        rust_version = ?args.rust_version,
+        "selecting workspace packages"
+    );
     let selected_ids = if !args.package.is_empty() {
         match_selected_packages(&workspace.metadata, &args.package)?
     } else if args.workspace || workspace.is_virtual_workspace {
@@ -85,6 +103,13 @@ pub fn select_packages(workspace: &WorkspaceData, args: &SelectionArgs) -> Resul
         })
         .collect::<Result<Vec<_>>>()?;
     let target = select_target(&members, args.rust_version.as_deref())?;
+
+    info!(
+        selected_members = members.len(),
+        target_mode = ?target.mode,
+        target_rust_version = ?target.target_rust_version,
+        "selected workspace packages"
+    );
 
     Ok(Selection { members, target })
 }

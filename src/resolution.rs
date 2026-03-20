@@ -8,18 +8,29 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tracing::{debug, info};
 
 pub fn build_candidate_resolution(
     workspace: &WorkspaceData,
     selection: &Selection,
     command: &ResolveCommand,
 ) -> Result<ResolveReport> {
+    info!(
+        workspace_root = %workspace.workspace_root.display(),
+        selected_members = selection.members.len(),
+        "building candidate resolution"
+    );
     let current = analyze_current_workspace(workspace, selection)?;
     let temp = TempWorkspace::copy_from(&workspace.workspace_root)?;
     let temp_manifest = manifest_in_temp(
         &workspace.workspace_root,
         temp.root(),
         &workspace.workspace_manifest,
+    );
+    debug!(
+        temp_root = %temp.root().display(),
+        temp_manifest = %temp_manifest.display(),
+        "prepared temporary workspace for resolution"
     );
     run_resolution_command(temp.root(), &temp_manifest)?;
     let candidate_workspace = load_workspace(Some(&temp_manifest))?;
@@ -54,6 +65,13 @@ pub fn build_candidate_resolution(
     if version_changes.is_empty() {
         notes.push("candidate lockfile did not change the resolved dependency graph".to_string());
     }
+
+    info!(
+        version_changes = version_changes.len(),
+        improved_packages = improved_packages.len(),
+        remaining_blockers = remaining_blockers.len(),
+        "completed candidate resolution"
+    );
 
     Ok(ResolveReport {
         current,
@@ -97,12 +115,23 @@ fn run_resolution_command(workspace_root: &Path, manifest_path: &Path) -> Result
     let lockfile = workspace_root.join("Cargo.lock");
     let mut command = Command::new("cargo");
     command.current_dir(workspace_root);
+    let subcommand = if lockfile.exists() {
+        "update"
+    } else {
+        "generate-lockfile"
+    };
     if lockfile.exists() {
         command.args(["update", "--workspace", "--manifest-path"]);
     } else {
         command.args(["generate-lockfile", "--manifest-path"]);
     }
     command.arg(manifest_path);
+    debug!(
+        workspace_root = %workspace_root.display(),
+        manifest_path = %manifest_path.display(),
+        subcommand,
+        "invoking cargo resolver"
+    );
     let output = command
         .output()
         .context("failed to execute cargo resolver")?;
@@ -126,15 +155,22 @@ fn compute_version_changes(
     current: &WorkspaceData,
     candidate: &WorkspaceData,
 ) -> Vec<CandidateVersionChange> {
+    compute_version_changes_from_packages(&current.packages_by_id, &candidate.packages_by_id)
+}
+
+fn compute_version_changes_from_packages(
+    current_packages: &BTreeMap<String, crate::model::ResolvedPackage>,
+    candidate_packages: &BTreeMap<String, crate::model::ResolvedPackage>,
+) -> Vec<CandidateVersionChange> {
     let mut current_versions = BTreeMap::new();
-    for package in current.packages_by_id.values() {
+    for package in current_packages.values() {
         current_versions.insert(
             (package.name.clone(), package.source.clone()),
             package.version.to_string(),
         );
     }
     let mut candidate_versions = BTreeMap::new();
-    for package in candidate.packages_by_id.values() {
+    for package in candidate_packages.values() {
         candidate_versions.insert(
             (package.name.clone(), package.source.clone()),
             package.version.to_string(),
@@ -191,4 +227,104 @@ fn diff_summary(before: &str, after: &str) -> String {
         .filter(|line| line.trim_start().starts_with("name ="))
         .count();
     format!("package entries: {before_count} -> {after_count}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compute_version_changes_from_packages;
+    use crate::model::{PackageSourceKind, ResolvedPackage};
+    use proptest::collection::btree_map;
+    use proptest::prelude::*;
+    use semver::Version;
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+
+    #[derive(Debug, Clone)]
+    struct PackageSpec {
+        source: Option<&'static str>,
+        version: (u64, u64, u64),
+    }
+
+    fn spec_strategy() -> impl Strategy<Value = PackageSpec> {
+        (
+            prop_oneof![
+                Just(None),
+                Just(Some(
+                    "registry+https://github.com/rust-lang/crates.io-index"
+                )),
+                Just(Some("git+https://example.invalid/repo")),
+            ],
+            (0u64..4, 0u64..6, 0u64..8),
+        )
+            .prop_map(|(source, version)| PackageSpec { source, version })
+    }
+
+    fn package_map(specs: &BTreeMap<u8, PackageSpec>) -> BTreeMap<String, ResolvedPackage> {
+        specs
+            .iter()
+            .map(|(id, spec)| {
+                let package_id = format!("pkg-{id}");
+                let package_name = format!("crate_{id}");
+                (
+                    package_id.clone(),
+                    ResolvedPackage {
+                        id: package_id,
+                        name: package_name,
+                        version: Version::new(spec.version.0, spec.version.1, spec.version.2),
+                        source: spec.source.map(str::to_string),
+                        source_kind: match spec.source {
+                            Some(source) if source.starts_with("registry+") => {
+                                PackageSourceKind::Registry
+                            }
+                            Some(source) if source.starts_with("git+") => PackageSourceKind::Git,
+                            Some(_) => PackageSourceKind::Unknown,
+                            None => PackageSourceKind::Path,
+                        },
+                        manifest_path: PathBuf::from("Cargo.toml"),
+                        rust_version: Some("1.70".to_string()),
+                        workspace_member: false,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    proptest! {
+        #[test]
+        fn version_change_diff_matches_package_versions(
+            current in btree_map(0u8..32, spec_strategy(), 0..24),
+            candidate in btree_map(0u8..32, spec_strategy(), 0..24),
+        ) {
+            let current_packages = package_map(&current);
+            let candidate_packages = package_map(&candidate);
+            let changes = compute_version_changes_from_packages(&current_packages, &candidate_packages);
+
+            let mut expected = BTreeMap::new();
+            for package in current_packages.values() {
+                expected.insert(
+                    (package.name.clone(), package.source.clone()),
+                    (Some(package.version.to_string()), None),
+                );
+            }
+            for package in candidate_packages.values() {
+                expected
+                    .entry((package.name.clone(), package.source.clone()))
+                    .and_modify(|entry| entry.1 = Some(package.version.to_string()))
+                    .or_insert((None, Some(package.version.to_string())));
+            }
+            expected.retain(|_, versions| versions.0 != versions.1);
+
+            let actual = changes
+                .into_iter()
+                .map(|change| {
+                    (
+                        (change.package_name, change.source),
+                        (change.before, change.after),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>();
+
+            prop_assert_eq!(actual, expected);
+        }
+    }
 }
