@@ -207,15 +207,21 @@ fn members_to_targets(members: &[SelectedMember]) -> Vec<MemberTarget> {
 }
 
 fn match_selected_packages(metadata: &Metadata, specs: &[String]) -> Result<Vec<String>> {
+    let workspace_member_ids = metadata
+        .workspace_members
+        .iter()
+        .map(|id| id.repr.clone())
+        .collect::<BTreeSet<_>>();
     let mut matched = BTreeSet::new();
     for spec in specs {
         let candidates = metadata
             .packages
             .iter()
             .filter(|package| {
-                package.name.to_string() == *spec
-                    || package.id.repr == *spec
-                    || package.manifest_path.as_str().contains(spec)
+                workspace_member_ids.contains(&package.id.repr)
+                    && (package.name.to_string() == *spec
+                        || package.id.repr == *spec
+                        || package.manifest_path.as_str().contains(spec))
             })
             .map(|package| package.id.repr.clone())
             .collect::<Vec<_>>();

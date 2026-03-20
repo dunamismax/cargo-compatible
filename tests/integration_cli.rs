@@ -119,6 +119,72 @@ fn explain_path_dep_human_snapshot() {
 }
 
 #[test]
+fn explain_path_dep_markdown_snapshot() {
+    let fixture_root = fixture("path-too-new");
+    let output = bin()
+        .args([
+            "explain",
+            "too_new",
+            "--manifest-path",
+            fixture_root.join("Cargo.toml").to_str().unwrap(),
+            "--format",
+            "markdown",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let output = sanitize_text(&String::from_utf8(output).unwrap(), &fixture_root);
+    assert_snapshot!("explain_path_dep_markdown", output);
+}
+
+#[test]
+fn explain_rejects_unknown_query() {
+    let fixture_root = fixture("path-too-new");
+    let output = bin()
+        .args([
+            "explain",
+            "definitely-not-a-package",
+            "--manifest-path",
+            fixture_root.join("Cargo.toml").to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    let stderr = sanitize_text(&String::from_utf8(output).unwrap(), &fixture_root);
+    assert!(
+        stderr.contains("query `definitely-not-a-package` did not match any resolved package"),
+        "unexpected stderr: {stderr}"
+    );
+}
+
+#[test]
+fn scan_rejects_non_workspace_package_selection() {
+    let fixture_root = fixture("missing-rust-version");
+    let output = bin()
+        .args([
+            "scan",
+            "--manifest-path",
+            fixture_root.join("Cargo.toml").to_str().unwrap(),
+            "--package",
+            "helper",
+        ])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    let stderr = sanitize_text(&String::from_utf8(output).unwrap(), &fixture_root);
+    assert!(
+        stderr.contains("package spec `helper` did not match any workspace member"),
+        "unexpected stderr: {stderr}"
+    );
+}
+
+#[test]
 fn resolve_virtual_workspace_json_snapshot() {
     let fixture_root = fixture("virtual-workspace");
     let output = bin()
@@ -150,4 +216,25 @@ fn resolve_virtual_workspace_json_snapshot() {
         );
     }
     assert_json_snapshot!("resolve_virtual_workspace_json", value);
+}
+
+#[test]
+fn resolve_virtual_workspace_markdown_snapshot() {
+    let fixture_root = fixture("virtual-workspace");
+    let output = bin()
+        .args([
+            "resolve",
+            "--manifest-path",
+            fixture_root.join("Cargo.toml").to_str().unwrap(),
+            "--workspace",
+            "--format",
+            "markdown",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let output = sanitize_text(&String::from_utf8(output).unwrap(), &fixture_root);
+    assert_snapshot!("resolve_virtual_workspace_markdown", output);
 }

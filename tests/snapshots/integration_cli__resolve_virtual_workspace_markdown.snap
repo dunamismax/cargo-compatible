@@ -1,0 +1,22 @@
+---
+source: tests/integration_cli.rs
+assertion_line: 239
+expression: output
+---
+# Candidate Resolution
+- Current blockers: 0 incompatible, 0 unknown
+- Candidate blockers: 0 incompatible, 0 unknown
+- Candidate lockfile captured: yes
+
+## Version Changes
+- None
+
+## Improved Packages
+- None
+
+## Remaining Blockers
+- None
+
+## Notes
+- virtual workspace is missing `workspace.resolver = "3"`; Cargo's rust-version-aware fallback is clearer with resolver 3
+- candidate lockfile did not change the resolved dependency graph

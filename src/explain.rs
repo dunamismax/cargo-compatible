@@ -5,40 +5,66 @@ use crate::model::{
     BlockerKind, CompatibilityStatus, ExplainReport, PackageIssue, Selection, WorkspaceData,
 };
 use crate::resolution::build_candidate_resolution;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 pub fn build_explain_report(
     workspace: &WorkspaceData,
     selection: &Selection,
     command: &ExplainCommand,
 ) -> Result<ExplainReport> {
+    let package_id = package_id_from_query(workspace, &command.query)
+        .map(|id| id.repr.clone())
+        .ok_or_else(|| {
+            anyhow!(
+                "query `{}` did not match any resolved package",
+                command.query
+            )
+        })?;
     let current = analyze_current_workspace(workspace, selection)?;
-    let package_id = package_id_from_query(workspace, &command.query).map(|id| id.repr.clone());
-    let package = package_id
-        .as_ref()
-        .and_then(|id| workspace.packages_by_id.get(id))
-        .cloned();
-    let package_for_candidate = package.clone();
-    let current_issue = package_id.as_ref().and_then(|id| find_issue(&current, id));
-    let resolve = build_candidate_resolution(
-        workspace,
-        selection,
-        &crate::cli::ResolveCommand {
-            selection: command.selection.clone(),
-            format: command.format,
-            write_candidate: None,
-            write_report: None,
-        },
-    )?;
-    let candidate_issue = package_id
-        .as_ref()
-        .and_then(|id| find_issue(&resolve.candidate, id));
-    let blocker = classify_blocker(package.as_ref(), current_issue, candidate_issue, selection);
+    let package = workspace
+        .packages_by_id
+        .get(&package_id)
+        .cloned()
+        .ok_or_else(|| anyhow!("resolved package `{package_id}` missing from package map"))?;
+    let current_issue = find_issue(&current, &package_id);
+
+    let mut candidate_version = None;
+    let mut candidate_status = None;
+    let mut notes = workspace.recommendations.clone();
+    let blocker;
+
+    if current_issue.is_some() {
+        let resolve = build_candidate_resolution(
+            workspace,
+            selection,
+            &crate::cli::ResolveCommand {
+                selection: command.selection.clone(),
+                format: command.format,
+                write_candidate: None,
+                write_report: None,
+            },
+        )?;
+        let candidate_issue = find_issue(&resolve.candidate, &package_id);
+        candidate_version = candidate_issue
+            .map(|issue| issue.package.version.to_string())
+            .or_else(|| {
+                resolve
+                    .version_changes
+                    .iter()
+                    .find(|change| change.package_name == package.name)
+                    .and_then(|change| change.after.clone())
+            });
+        candidate_status = candidate_issue.map(|issue| issue.status.clone());
+        notes = resolve.notes;
+        blocker = classify_blocker(Some(&package), current_issue, candidate_issue, selection);
+    } else {
+        blocker = classify_blocker(Some(&package), current_issue, None, selection);
+    }
 
     Ok(ExplainReport {
         query: command.query.clone(),
         target: selection.target.clone(),
-        package,
+        package: Some(package),
         current_status: current_issue.map(|issue| issue.status.clone()),
         current_reason: current_issue.map(|issue| issue.reason.clone()),
         current_paths: current_issue
@@ -47,30 +73,10 @@ pub fn build_explain_report(
         current_rust_version: current_issue
             .map(|issue| issue.package.rust_version.clone())
             .unwrap_or(None),
-        candidate_version: package_id.as_ref().and_then(|id| {
-            resolve
-                .candidate
-                .incompatible_packages
-                .iter()
-                .chain(resolve.candidate.unknown_packages.iter())
-                .find(|issue| issue.package.id == *id)
-                .map(|issue| issue.package.version.to_string())
-                .or_else(|| {
-                    resolve
-                        .version_changes
-                        .iter()
-                        .find(|change| {
-                            package_for_candidate
-                                .as_ref()
-                                .map(|pkg| change.package_name == pkg.name)
-                                .unwrap_or(false)
-                        })
-                        .and_then(|change| change.after.clone())
-                })
-        }),
-        candidate_status: candidate_issue.map(|issue| issue.status.clone()),
+        candidate_version,
+        candidate_status,
         blocker,
-        notes: resolve.notes,
+        notes,
     })
 }
 
