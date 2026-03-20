@@ -1,0 +1,21 @@
+---
+source: tests/integration_cli.rs
+expression: output
+---
+Current State
+  target selection: mixed-or-missing
+  selected members: low, shared, high
+  recommendations:
+    - virtual workspace is missing `workspace.resolver = "3"`; Cargo's rust-version-aware fallback is clearer with resolver 3
+
+Package Summaries
+  high: 0 incompatible, 0 unknown
+  low: 1 incompatible, 0 unknown
+  shared: 0 incompatible, 0 unknown
+
+Incompatible Packages
+  shared@0.1.0 (resolved package declares rust-version 1.65, which exceeds target 1.60)
+    via low: low@0.1.0 -> shared@0.1.0
+
+Unknown Packages
+  none

@@ -1,0 +1,66 @@
+---
+source: tests/integration_cli.rs
+expression: value
+---
+{
+  "incompatible_packages": [],
+  "notes": [],
+  "package_summaries": [
+    {
+      "incompatible": 0,
+      "package_name": "missing-rust-version-app",
+      "unknown": 1
+    }
+  ],
+  "target": {
+    "members": [
+      {
+        "package_id": "path+file://$FIXTURE#missing-rust-version-app@0.1.0",
+        "package_name": "missing-rust-version-app",
+        "rust_version": "1.70"
+      }
+    ],
+    "mode": "selected_package",
+    "notes": [],
+    "target_rust_version": "1.70"
+  },
+  "unknown_packages": [
+    {
+      "affected_members": [
+        "missing-rust-version-app"
+      ],
+      "package": {
+        "id": "path+file://$FIXTURE/helper#0.1.0",
+        "manifest_path": "$FIXTURE/helper/Cargo.toml",
+        "name": "helper",
+        "rust_version": null,
+        "source": null,
+        "source_kind": "path",
+        "version": "0.1.0",
+        "workspace_member": false
+      },
+      "paths": [
+        {
+          "member": "missing-rust-version-app",
+          "packages": [
+            "missing-rust-version-app@0.1.0",
+            "helper@0.1.0"
+          ],
+          "target_rust_version": "1.70"
+        }
+      ],
+      "reason": "resolved package does not declare `rust-version`; compatibility is unknown",
+      "status": "unknown",
+      "target_rust_version": "1.70"
+    }
+  ],
+  "workspace": {
+    "is_virtual_workspace": false,
+    "recommendations": [],
+    "resolver": null,
+    "selected_members": [
+      "missing-rust-version-app"
+    ],
+    "workspace_root": "$FIXTURE"
+  }
+}

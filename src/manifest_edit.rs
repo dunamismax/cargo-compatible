@@ -1,0 +1,231 @@
+use crate::index::RegistryLookup;
+use crate::metadata::display_rust_version;
+use crate::model::{
+    DependencyConstraint, ManifestSuggestion, ResolveReport, Selection, WorkspaceData,
+};
+use anyhow::{anyhow, bail, Context, Result};
+use cargo_metadata::DependencyKind;
+use semver::VersionReq;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+use toml_edit::{value, DocumentMut, Item};
+
+pub fn suggest_manifest_changes(
+    workspace: &WorkspaceData,
+    selection: &Selection,
+    resolution: &ResolveReport,
+    registry: &dyn RegistryLookup,
+    allow_major: bool,
+) -> Result<Vec<ManifestSuggestion>> {
+    let candidate_problem_names = resolution
+        .candidate
+        .incompatible_packages
+        .iter()
+        .chain(resolution.candidate.unknown_packages.iter())
+        .map(|issue| issue.package.name.clone())
+        .collect::<BTreeSet<_>>();
+    if candidate_problem_names.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut suggestions = Vec::new();
+    for member in &selection.members {
+        let member_target = member.rust_version.clone();
+        let Some(target_rust_version) = member_target else {
+            continue;
+        };
+        let constraints =
+            direct_dependency_constraints(workspace, &member.package_id, &member.manifest_path)?;
+        for constraint in constraints {
+            if !candidate_problem_names.contains(&constraint.package_name) {
+                continue;
+            }
+            if !constraint
+                .source
+                .as_deref()
+                .map(|source| source.starts_with("registry+"))
+                .unwrap_or(true)
+            {
+                continue;
+            }
+            let Some(candidate) = registry.highest_compatible(&constraint, allow_major)? else {
+                continue;
+            };
+            let current_req = VersionReq::parse(&constraint.requirement).with_context(|| {
+                format!("invalid version requirement `{}`", constraint.requirement)
+            })?;
+            if current_req.matches(&candidate.version)
+                && resolution
+                    .candidate
+                    .incompatible_packages
+                    .iter()
+                    .all(|issue| issue.package.name != constraint.package_name)
+            {
+                continue;
+            }
+            suggestions.push(ManifestSuggestion {
+                package_name: member.package_name.clone(),
+                dependency_key: constraint.dependency_key.clone(),
+                dependency_name: constraint.package_name.clone(),
+                manifest_path: constraint.manifest_path.clone(),
+                current_requirement: constraint.requirement.clone(),
+                suggested_requirement: candidate.version.to_string(),
+                reason: format!(
+                    "highest compatible non-yanked release with requested features for target {}",
+                    display_rust_version(&target_rust_version)
+                ),
+                target_rust_version: display_rust_version(&target_rust_version),
+                section: constraint.section.clone(),
+            });
+        }
+    }
+    suggestions.sort_by(|left, right| {
+        left.package_name
+            .cmp(&right.package_name)
+            .then_with(|| left.dependency_key.cmp(&right.dependency_key))
+    });
+    suggestions.dedup_by(|left, right| {
+        left.manifest_path == right.manifest_path && left.dependency_key == right.dependency_key
+    });
+    Ok(suggestions)
+}
+
+pub fn apply_manifest_suggestions(suggestions: &[ManifestSuggestion]) -> Result<()> {
+    let by_manifest = suggestions.iter().fold(
+        BTreeMap::<PathBuf, Vec<&ManifestSuggestion>>::new(),
+        |mut acc, suggestion| {
+            acc.entry(suggestion.manifest_path.clone())
+                .or_default()
+                .push(suggestion);
+            acc
+        },
+    );
+    for (manifest_path, manifest_suggestions) in by_manifest {
+        let contents = fs::read_to_string(&manifest_path)?;
+        let mut document = contents.parse::<DocumentMut>()?;
+        for suggestion in manifest_suggestions {
+            let updated = update_dependency_requirement(&mut document, suggestion)?;
+            if !updated {
+                bail!(
+                    "failed to locate dependency `{}` in `{}`",
+                    suggestion.dependency_key,
+                    manifest_path.display()
+                );
+            }
+        }
+        fs::write(&manifest_path, document.to_string())?;
+    }
+    Ok(())
+}
+
+fn direct_dependency_constraints(
+    workspace: &WorkspaceData,
+    package_id: &str,
+    manifest_path: &Path,
+) -> Result<Vec<DependencyConstraint>> {
+    let package = workspace
+        .metadata
+        .packages
+        .iter()
+        .find(|package| package.id.repr == package_id)
+        .ok_or_else(|| anyhow!("selected package `{package_id}` missing from metadata"))?;
+    let constraints = package
+        .dependencies
+        .iter()
+        .filter(|dependency| dependency.kind == DependencyKind::Normal)
+        .map(|dependency| DependencyConstraint {
+            package_name: dependency.name.clone(),
+            dependency_key: dependency
+                .rename
+                .clone()
+                .unwrap_or_else(|| dependency.name.clone()),
+            manifest_path: manifest_path.to_path_buf(),
+            requirement: dependency.req.to_string(),
+            source: dependency.source.as_ref().map(ToString::to_string),
+            features: dependency.features.iter().cloned().collect::<BTreeSet<_>>(),
+            uses_default_features: dependency.uses_default_features,
+            optional: dependency.optional,
+            section: dependency_section_label(dependency.kind),
+            target_rust_version: package.rust_version.clone(),
+        })
+        .collect::<Vec<_>>();
+    Ok(constraints)
+}
+
+fn dependency_section_label(kind: DependencyKind) -> String {
+    match kind {
+        DependencyKind::Normal => "dependencies",
+        DependencyKind::Development => "dev-dependencies",
+        DependencyKind::Build => "build-dependencies",
+        _ => "dependencies",
+    }
+    .to_string()
+}
+
+fn update_dependency_requirement(
+    document: &mut DocumentMut,
+    suggestion: &ManifestSuggestion,
+) -> Result<bool> {
+    if update_dependency_in_root_table(document, &suggestion.section, suggestion)? {
+        return Ok(true);
+    }
+    let Some(target_item) = document.get_mut("target") else {
+        return Ok(false);
+    };
+    let Some(target_table) = target_item.as_table_like_mut() else {
+        return Ok(false);
+    };
+    for (_, item) in target_table.iter_mut() {
+        let Some(target_cfg) = item.as_table_like_mut() else {
+            continue;
+        };
+        if let Some(dep_table) = target_cfg.get_mut(&suggestion.section) {
+            if update_dep_item(
+                dep_table,
+                &suggestion.dependency_key,
+                &suggestion.suggested_requirement,
+            )? {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn update_dependency_in_root_table(
+    document: &mut DocumentMut,
+    section: &str,
+    suggestion: &ManifestSuggestion,
+) -> Result<bool> {
+    let Some(item) = document.get_mut(section) else {
+        return Ok(false);
+    };
+    update_dep_item(
+        item,
+        &suggestion.dependency_key,
+        &suggestion.suggested_requirement,
+    )
+}
+
+fn update_dep_item(item: &mut Item, key: &str, suggested_requirement: &str) -> Result<bool> {
+    let Some(table) = item.as_table_like_mut() else {
+        return Ok(false);
+    };
+    let Some(dep_item) = table.get_mut(key) else {
+        return Ok(false);
+    };
+    if dep_item.is_str() {
+        *dep_item = value(suggested_requirement);
+        return Ok(true);
+    }
+    if let Some(inline) = dep_item.as_inline_table_mut() {
+        inline.insert("version", toml_edit::Value::from(suggested_requirement));
+        return Ok(true);
+    }
+    if let Some(dep_table) = dep_item.as_table_like_mut() {
+        dep_table.insert("version", value(suggested_requirement));
+        return Ok(true);
+    }
+    Ok(false)
+}

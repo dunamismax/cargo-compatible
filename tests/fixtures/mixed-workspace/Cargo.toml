@@ -1,0 +1,2 @@
+[workspace]
+members = ["members/low", "members/high", "shared"]

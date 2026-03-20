@@ -1,0 +1,8 @@
+[package]
+name = "path-too-new"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.60"
+
+[dependencies]
+too_new = { path = "too_new" }
