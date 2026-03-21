@@ -297,3 +297,44 @@ Remaining notable follow-ups:
    - `README.md`
    - `CHANGELOG.md`
    - fixtures and snapshots as needed
+
+## Code Review Addendum — 2026-03-21
+
+Fresh review scope for this pass:
+
+- re-read the full source tree, tests, benchmark, CI workflow, and repo docs
+- re-ran `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, `cargo nextest run`, `cargo deny check`, and `cargo bench --bench large_workspace_resolver --no-run`
+- ran targeted manual repros for package selection, explain scoping, and `--write-report` behavior
+
+### Current strengths
+
+- The March 20 follow-up fixes landed cleanly: non-workspace `--package` selection now fails, invalid `explain` queries fail fast, and `resolve`/`explain` Markdown output is now real Markdown instead of JSON fallback.
+- The architecture still reads well: metadata loading, graph analysis, candidate resolution, manifest editing, explain flow, and reporting remain cleanly separated and easy to audit.
+- CI and local quality gates are in good shape for a young CLI tool. This pass was green on `fmt`, `clippy -D warnings`, `test`, `nextest`, `cargo-deny`, and bench compilation.
+- Repo docs are still unusually disciplined overall: `README.md`, `AGENTS.md`, and the existing BUILD notes match the high-level behavior and safety model.
+
+### Remaining issues / risks
+
+1. `--package` matching is still too loose for short or common specs.
+   - `src/metadata.rs` still treats `package.manifest_path.contains(spec)` as a valid match.
+   - In a temporary two-member workspace (`a`, `b`), `cargo compatible scan --package a` selected both members because both manifest paths contained the substring `a`.
+   - That can silently widen scope, flip target selection to `mixed-or-missing`, and make downstream reports look wrong even when the requested package name is exact.
+2. `explain` is not scoped to the selected dependency graph.
+   - `src/metadata.rs::package_id_from_query` searches all resolved packages in metadata, not only packages reachable from the selected members.
+   - Repro: selecting only member `a` by exact manifest path still allows `cargo compatible explain b ...` to succeed and report `b` as `compatible` with no dependency path, even though `b` is outside the selected analysis scope.
+   - That is a CLI UX and correctness problem: success currently means “package exists somewhere in metadata,” not “package is present in the selected graph.”
+3. `--write-report` ignores `--format`.
+   - `src/lib.rs` always writes `ResolveReport` as pretty JSON when `write_report` is set, regardless of `--format`.
+   - Repro: `cargo compatible resolve --format markdown --write-report /tmp/report.md` prints Markdown to stdout but writes JSON to the file.
+   - That is a small but real automation footgun and the current docs do not make the behavior explicit.
+4. Test coverage still has blind spots around edge and mutating flows.
+   - Current integration coverage is good for fixture-backed scan/resolve/explain behavior, but it does not assert exact positive `--package` selection, out-of-scope `explain` queries, or `--write-report` format semantics.
+   - `apply-lock`, `--write-candidate`, and `--write-manifests` are still not exercised directly in integration tests.
+   - The selection/scoping issues above slipped through precisely because those boundaries are not yet pinned down by tests.
+
+### Recommended next steps
+
+1. Replace manifest-path substring matching with exact package-name / package-id / normalized manifest-path matching, then add focused tests for short package names and ambiguous path fragments.
+2. Make `explain` require reachability from the selected members and fail clearly when a query resolves to a package outside the selected graph.
+3. Either make `--write-report` honor `--format` or document/rename it as JSON-only, then test stdout-vs-file behavior explicitly.
+4. Add temp-dir integration coverage for `apply-lock`, `--write-candidate`, and `--write-manifests` so the I/O boundary is verified, not assumed.
