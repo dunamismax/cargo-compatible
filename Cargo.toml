@@ -2,8 +2,14 @@
 name = "cargo-compatible"
 version = "0.1.0"
 edition = "2021"
-description = "Cargo subcommand for finding the highest dependency graph compatible with a target Rust version"
+description = "Cargo subcommand for auditing and resolving dependency graphs against a target Rust version or MSRV"
 license = "MIT"
+readme = "README.md"
+repository = "https://github.com/dunamismax/cargo-compatible"
+homepage = "https://github.com/dunamismax/cargo-compatible"
+documentation = "https://docs.rs/cargo-compatible"
+keywords = ["cargo", "msrv", "rust-version", "dependencies", "compatibility"]
+categories = ["development-tools::cargo-plugins", "command-line-utilities"]
 
 [dependencies]
 anyhow = "1.0"

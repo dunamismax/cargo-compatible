@@ -30,6 +30,14 @@ It focuses on five workflows:
 - `suggest-manifest` is dry-run by default.
 - Missing dependency `rust-version` metadata is treated as unknown, not compatible.
 
+## Installation
+
+```bash
+cargo install cargo-compatible
+```
+
+After installation, the subcommand is available as `cargo compatible`.
+
 ## Quick Start
 
 ```bash
