@@ -6,7 +6,20 @@ This file is concise repo memory for future agents and developers. `BUILD.md` is
 
 `cargo-compatible` is a Cargo subcommand for auditing whether a workspace's currently resolved dependency graph fits a target Rust version or MSRV, producing a safer lockfile candidate, explaining blockers, and conservatively suggesting direct manifest changes only when lockfile-only resolution is not enough.
 
+## Vision
+
+Become the standard Cargo companion for MSRV management. The trajectory: v0.1 correctness foundation, v0.2 ecosystem integration (CI output, GitHub Actions, config files), v0.3 intelligence (feature-aware analysis, policy mode), v0.4 performance (incremental, caching), v1.0 production-grade (stable schema, exhaustive coverage). Non-goal: never become a package manager or build system.
+
 ## Architecture
+
+```
+cli.rs → lib.rs → metadata.rs → compat.rs ─┐
+                                             ├→ report.rs (+ identity.rs)
+                  resolution.rs ←────────────┘
+                  temp_workspace.rs
+                  index.rs → manifest_edit.rs
+                  explain.rs
+```
 
 - `src/cli.rs`
   - Clap CLI definitions for `scan`, `resolve`, `apply-lock`, `suggest-manifest`, and `explain`
@@ -58,6 +71,7 @@ This file is concise repo memory for future agents and developers. `BUILD.md` is
 - `explain` only succeeds for packages reachable from the selected dependency graph; out-of-scope queries should fail clearly.
 - Path and git dependencies are analyzed and explained, but they do not receive bogus crates.io downgrade suggestions.
 - `cargo-deny` currently passes with duplicate-version warnings from transitive dependencies; CI treats them as warnings, not failures.
+- MSRV is declared as 1.74 in `Cargo.toml` and verified in CI.
 
 ## Verified Commands
 
@@ -82,10 +96,11 @@ cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.
 - Feature validation is conservative and not a complete reimplementation of Cargo feature resolution semantics.
 - Mixed-workspace reasoning is explanatory rather than prescriptive; this version does not auto-edit `workspace.resolver = "3"`.
 - The Criterion benchmark is intentionally synthetic and path-only; it tracks large-workspace resolver overhead without exercising networked registry traffic.
+- JSON output schema is not yet formally versioned or documented.
 
 ## Working Agreement
 
-- Keep `BUILD.md`, `README.md`, and this file aligned whenever command behavior, output schema, workflow guarantees, or repository structure change.
+- Keep `BUILD.md`, `README.md`, `CONTRIBUTING.md`, and this file aligned whenever command behavior, output schema, workflow guarantees, or repository structure change.
 - Prefer updating fixture workspaces and snapshots when changing analysis or reporting behavior.
 - Treat the source of truth in this order:
   - `src/cli.rs`

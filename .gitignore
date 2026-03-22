@@ -1,1 +1,6 @@
 /target
+/.cargo-compatible
+*.swp
+*.swo
+*~
+.DS_Store
