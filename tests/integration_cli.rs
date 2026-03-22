@@ -407,6 +407,71 @@ fn explain_path_dep_markdown_snapshot() {
 }
 
 #[test]
+fn scan_path_too_new_reports_incompatible() {
+    let fixture_root = fixture("path-too-new");
+    let output = bin()
+        .args([
+            "scan",
+            "--manifest-path",
+            fixture_root.join("Cargo.toml").to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let stdout = String::from_utf8(output).unwrap();
+    assert!(
+        stdout.contains("Incompatible Packages"),
+        "should have incompatible section"
+    );
+    assert!(
+        stdout.contains("too_new"),
+        "should mention the too_new package as incompatible"
+    );
+    assert!(
+        stdout.contains("exceeds target"),
+        "should explain why it's incompatible"
+    );
+}
+
+#[test]
+fn scan_path_too_new_json_has_incompatible() {
+    let fixture_root = fixture("path-too-new");
+    let output = bin()
+        .args([
+            "scan",
+            "--manifest-path",
+            fixture_root.join("Cargo.toml").to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let value: Value = serde_json::from_slice(&output).unwrap();
+    let incompatible = value
+        .get("incompatible_packages")
+        .and_then(Value::as_array)
+        .expect("should have incompatible_packages array");
+    assert!(
+        !incompatible.is_empty(),
+        "should have at least one incompatible package"
+    );
+    let first = &incompatible[0];
+    assert_eq!(
+        first.pointer("/package/name").and_then(Value::as_str),
+        Some("too_new")
+    );
+    assert_eq!(
+        first.pointer("/status").and_then(Value::as_str),
+        Some("incompatible")
+    );
+}
+
+#[test]
 fn scan_disambiguates_dependency_paths_for_same_name_git_packages() {
     let fixture = stage_git_dependency_fixture();
     let output = bin()
@@ -436,6 +501,47 @@ fn scan_disambiguates_dependency_paths_for_same_name_git_packages() {
         .iter()
         .all(|line| line.contains("shared@0.1.0 [git: file://")));
     assert!(path_lines.iter().all(|line| line.contains('#')));
+}
+
+#[test]
+fn explain_path_dep_json_has_blocker_classification() {
+    let fixture_root = fixture("path-too-new");
+    let output = bin()
+        .args([
+            "explain",
+            "too_new",
+            "--manifest-path",
+            fixture_root.join("Cargo.toml").to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let value: Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        value.pointer("/query").and_then(Value::as_str),
+        Some("too_new")
+    );
+    assert!(
+        value.get("blocker").is_some(),
+        "explain JSON should include blocker classification"
+    );
+    assert_eq!(
+        value.pointer("/blocker").and_then(Value::as_str),
+        Some("path_or_git_constraint"),
+        "path dep should be classified as path_or_git_constraint"
+    );
+    assert!(
+        value
+            .get("current_paths")
+            .and_then(Value::as_array)
+            .map(|a| !a.is_empty())
+            .unwrap_or(false),
+        "should include dependency paths"
+    );
 }
 
 #[test]
@@ -750,6 +856,67 @@ fn apply_lock_writes_candidate_lockfile_to_workspace() {
     assert_eq!(
         fs::read_to_string(workspace_root.join("Cargo.lock")).unwrap(),
         candidate_lockfile
+    );
+}
+
+#[test]
+fn apply_lock_reports_noop_when_candidate_matches_current() {
+    let temp = tempdir().unwrap();
+    let workspace_root = temp.path().join("workspace");
+    let lockfile_contents =
+        "version = 4\n\n[[package]]\nname = \"apply-lock-fixture\"\nversion = \"0.1.0\"\n";
+    fs::create_dir_all(&workspace_root).unwrap();
+    fs::write(workspace_root.join("Cargo.lock"), lockfile_contents).unwrap();
+    let candidate_path = temp.path().join("candidate").join("Cargo.lock");
+    fs::create_dir_all(candidate_path.parent().unwrap()).unwrap();
+    fs::write(&candidate_path, lockfile_contents).unwrap();
+
+    let result =
+        cargo_compatible::resolution::apply_candidate_lockfile(&workspace_root, candidate_path)
+            .unwrap();
+
+    assert!(
+        result.contains("nothing to apply"),
+        "expected no-op message, got: {result}"
+    );
+    assert_eq!(
+        fs::read_to_string(workspace_root.join("Cargo.lock")).unwrap(),
+        lockfile_contents
+    );
+}
+
+#[test]
+fn resolve_write_report_honors_json_format() {
+    let fixture_root = fixture("virtual-workspace");
+    let temp = tempdir().unwrap();
+    let report_path = temp.path().join("nested").join("report.json");
+    let output = bin()
+        .args([
+            "resolve",
+            "--manifest-path",
+            fixture_root.join("Cargo.toml").to_str().unwrap(),
+            "--workspace",
+            "--format",
+            "json",
+            "--write-report",
+            report_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let stdout = String::from_utf8(output).unwrap();
+    let report = fs::read_to_string(&report_path).unwrap();
+    assert_eq!(report, stdout.trim_end_matches('\n'));
+    let parsed: Value = serde_json::from_str(&report).expect("report should be valid JSON");
+    assert!(
+        parsed.get("current").is_some(),
+        "JSON report should have 'current' key"
+    );
+    assert!(
+        parsed.get("candidate").is_some(),
+        "JSON report should have 'candidate' key"
     );
 }
 

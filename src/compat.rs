@@ -232,7 +232,8 @@ fn parse_version_display(value: &str) -> Version {
         2 => format!("{}.{}.0", parts[0], parts[1]),
         _ => value.to_string(),
     };
-    Version::parse(&normalized).expect("package rust-version should parse")
+    Version::parse(&normalized)
+        .unwrap_or_else(|_| panic!("package rust-version `{value}` should parse as semver"))
 }
 
 fn shortest_paths_from_root(
@@ -302,4 +303,97 @@ fn issue_sort_key(left: &PackageIssue, right: &PackageIssue) -> std::cmp::Orderi
         .cmp(&right.package.name)
         .then_with(|| left.package.version.cmp(&right.package.version))
         .then_with(|| left.package.id.cmp(&right.package.id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_package, parse_version_display, strongest_status};
+    use crate::model::CompatibilityStatus;
+    use semver::Version;
+
+    #[test]
+    fn classify_compatible_package() {
+        let target = Version::new(1, 70, 0);
+        let (status, reason) = classify_package(Some("1.60"), &target);
+        assert!(matches!(status, CompatibilityStatus::Compatible));
+        assert!(reason.contains("compatible"));
+    }
+
+    #[test]
+    fn classify_incompatible_package() {
+        let target = Version::new(1, 60, 0);
+        let (status, reason) = classify_package(Some("1.70"), &target);
+        assert!(matches!(status, CompatibilityStatus::Incompatible));
+        assert!(reason.contains("exceeds target"));
+    }
+
+    #[test]
+    fn classify_exact_version_is_compatible() {
+        let target = Version::new(1, 70, 0);
+        let (status, _) = classify_package(Some("1.70"), &target);
+        assert!(matches!(status, CompatibilityStatus::Compatible));
+    }
+
+    #[test]
+    fn classify_unknown_when_missing_rust_version() {
+        let target = Version::new(1, 70, 0);
+        let (status, reason) = classify_package(None, &target);
+        assert!(matches!(status, CompatibilityStatus::Unknown));
+        assert!(reason.contains("unknown"));
+    }
+
+    #[test]
+    fn parse_version_display_handles_two_part_version() {
+        assert_eq!(parse_version_display("1.70"), Version::new(1, 70, 0));
+    }
+
+    #[test]
+    fn parse_version_display_handles_three_part_version() {
+        assert_eq!(parse_version_display("1.70.0"), Version::new(1, 70, 0));
+    }
+
+    #[test]
+    fn parse_version_display_handles_one_part_version() {
+        assert_eq!(parse_version_display("2"), Version::new(2, 0, 0));
+    }
+
+    #[test]
+    fn strongest_status_incompatible_wins() {
+        assert!(matches!(
+            strongest_status(
+                CompatibilityStatus::Unknown,
+                CompatibilityStatus::Incompatible
+            ),
+            CompatibilityStatus::Incompatible
+        ));
+        assert!(matches!(
+            strongest_status(
+                CompatibilityStatus::Incompatible,
+                CompatibilityStatus::Compatible
+            ),
+            CompatibilityStatus::Incompatible
+        ));
+    }
+
+    #[test]
+    fn strongest_status_unknown_beats_compatible() {
+        assert!(matches!(
+            strongest_status(
+                CompatibilityStatus::Compatible,
+                CompatibilityStatus::Unknown
+            ),
+            CompatibilityStatus::Unknown
+        ));
+    }
+
+    #[test]
+    fn strongest_status_compatible_when_both_compatible() {
+        assert!(matches!(
+            strongest_status(
+                CompatibilityStatus::Compatible,
+                CompatibilityStatus::Compatible
+            ),
+            CompatibilityStatus::Compatible
+        ));
+    }
 }

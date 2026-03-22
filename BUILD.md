@@ -91,7 +91,6 @@ What is actively being hardened:
 - True lockfile-only improvement fixture
 
 What does **not** exist yet:
-- Declared and enforced MSRV in CI
 - Formal JSON output schema versioning
 - Windows CI matrix
 - Feature-aware compatibility analysis
@@ -427,13 +426,13 @@ Status: not started
 
 Goal: make the release process repeatable, safe, and confidence-inspiring for both maintainers and users.
 
-- [ ] Add MSRV verification to CI (test against the declared `rust-version` in Cargo.toml).
-- [ ] Add cross-platform CI matrix (Linux, macOS, Windows).
+- [x] Add MSRV verification to CI (test against the declared `rust-version` in Cargo.toml).
+- [x] Add cross-platform CI matrix (Linux, macOS, Windows).
 - [ ] Add a release workflow that publishes to crates.io on tag push with changelog validation.
 - [ ] Add binary release builds for common platforms (Linux x86_64/aarch64, macOS x86_64/aarch64, Windows x86_64) via `cargo-dist` or manual cross-compilation.
 - [ ] Add `cargo-audit` to CI for security advisory checks beyond `cargo-deny`.
 - [ ] Add integration test coverage that runs against a real published crate's workspace (smoke test against a known-good external project).
-- [ ] Add CI job that runs the tool against its own workspace as a dogfood gate.
+- [x] Add CI job that runs the tool against its own workspace as a dogfood gate.
 - [ ] Consider `cargo-semver-checks` to prevent accidental breaking changes to the public API.
 - [ ] Add dependabot or renovate for automated dependency updates.
 
@@ -586,7 +585,7 @@ These questions need answers before or during the indicated phase:
 - Manifest suggestion quality depends on local sparse-index or local-registry metadata availability and intentionally does not reimplement full Cargo feature resolution.
 - The current benchmark is useful but synthetic; it does not yet prove behavior on registry-heavy or feature-heavy repositories.
 - The JSON output schema is not yet formally versioned; downstream consumers risk breakage on shape changes.
-- No MSRV is declared in Cargo.toml; the actual minimum Rust version required is unknown and untested.
+- MSRV is declared as 1.74 in Cargo.toml and enforced in CI; any dependency bump that silently raises the floor would still only be caught on the MSRV CI job, not locally.
 - Windows compatibility is untested; path handling and temp-workspace logic may have platform-specific bugs.
 - The `crates-index` dependency pins to a specific sparse-index protocol version; future crates.io changes could break lookups silently.
 
@@ -597,13 +596,13 @@ These questions need answers before or during the indicated phase:
 1. Extend package-identity disambiguation into dependency-path chains and the harder same-name multi-source cases that still fall back to package IDs.
 2. Add or explicitly defer a fixture that demonstrates a true lockfile-only improvement so the write-path and reporting flow is exercised against a less trivial resolution change.
 3. Keep the docs, snapshots, and source-of-truth sections aligned as the remaining hardening work lands.
-4. Declare and enforce an MSRV in Cargo.toml and CI.
-5. Begin planning the v0.2 release scope.
+4. Begin planning the v0.2 release scope.
 
 ---
 
 ## Progress log
 
+- 2026-03-22: Added MSRV badge to README, unit tests for `classify_package`/`strongest_status`/`parse_version_display`, integration tests for `apply-lock` no-op, `scan` incompatible reporting (human and JSON), `explain` JSON blocker classification, and `resolve --write-report` with JSON format. Improved panic message in `parse_version_display` to include the invalid value. Corrected BUILD.md risk register to reflect that MSRV is declared and enforced in CI (1.74 job + cross-platform matrix + dogfood gate already present). Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (48 tests pass). Next: continue identity-disambiguation and lockfile-improvement work.
 - 2026-03-22: Restored the fuller `BUILD.md` execution manual after the docs-tightening regression, refreshed `README.md` to stay concise but truthful, and re-synced the public docs with current package-selection, write-report, local-registry, and package-identity behavior. Verified with: `git diff --check`, `cargo run -- --help`. Next: keep the docs aligned while finishing the remaining identity-disambiguation and lockfile-improvement work.
 - 2026-03-22: Added source-aware human report labels for resolved, workspace, and path packages, taught manifest suggestions to read a crates.io local-registry replacement from workspace `.cargo/config.toml`, and added deterministic end-to-end `suggest-manifest --write-manifests` coverage via a local-registry fixture. Verified with: `cargo fmt --check`, `cargo test report::tests:: --lib`, `cargo test --test integration_cli suggest_manifest_write_manifests_uses_local_registry_fixture_end_to_end`, `cargo test --test integration_cli explain_path_dep`, `cargo test --test integration_cli scan_mixed_workspace_human_snapshot`. Stop point: a true lockfile-only improvement fixture is still missing because the current `cargo update --workspace` temp-copy flow preserves existing lockfile selections; that needs a deliberate repro or strategy change, not guesswork. Next: extend package-identity disambiguation into dependency-path chains and identify a credible lockfile-only improvement fixture.
 - 2026-03-22: Added direct `apply-lock` coverage, direct manifest-write coverage, and failure-path coverage for missing candidate lockfiles plus partial manifest-apply scenarios; also hardened package identity handling by making manifest-suggestion blocker matching source-aware and by omitting ambiguous multi-version same-identity resolve diffs instead of collapsing them incorrectly. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, `cargo nextest run`, `~/.cargo/bin/cargo-deny check`, `cargo bench --bench large_workspace_resolver --no-run`, `cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.toml`, `cargo run -- resolve --manifest-path tests/fixtures/virtual-workspace/Cargo.toml --workspace --format markdown`. Next: add a deterministic local-registry fixture for end-to-end `--write-manifests` coverage and keep tightening human-facing package identity disambiguation.
