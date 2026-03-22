@@ -1,14 +1,22 @@
-# cargo-compatible Build Manual
-
-Last updated: 2026-03-22
-Status: active correctness hardening
-Scope: Cargo subcommand for auditing, resolving, and explaining dependency-graph compatibility against a chosen Rust version or MSRV
+# BUILD.md
 
 ## Purpose
 
 This file is the canonical execution and tracking document for `cargo-compatible`.
-Any agent making substantial changes to code, docs, workflow, tests, or command behavior should read it first and update it before handoff.
-`README.md` stays public-facing and concise; this file carries the deeper repo-operational picture, source-of-truth map, progress state, verification ledger, and next-work guidance.
+
+It keeps the repo honest while the project moves from correctness hardening toward release polish and ecosystem integration. At any point it should answer:
+
+- what cargo-compatible is trying to become
+- what exists right now
+- what is explicitly not built yet
+- what the next correct move is
+- what must be proven before stronger claims are made
+
+Any agent making substantial changes to code, docs, workflow, tests, or command behavior should read it first and update it before handoff. `README.md` stays public-facing and concise; this file carries the deeper repo-operational picture, source-of-truth map, progress state, verification ledger, and next-work guidance.
+
+This is a living document. When code and docs disagree, fix them together in the same change.
+
+---
 
 ## Mission
 
@@ -17,6 +25,8 @@ Any agent making substantial changes to code, docs, workflow, tests, or command 
 - Explain blockers clearly enough that users can act without reverse-engineering Cargo metadata by hand.
 - Stay conservative when the tool cannot prove something, especially around missing `rust-version`, sparse-index gaps, non-registry dependencies, and manifest rewriting.
 - Keep the codebase small, auditable, and trustworthy as a Cargo subcommand rather than drifting into a speculative package manager clone.
+
+---
 
 ## Long-Term Vision
 
@@ -30,38 +40,62 @@ Any agent making substantial changes to code, docs, workflow, tests, or command 
 
 The non-goal boundary is equally important: this tool should never become an alternative package manager, a build system, or a CI orchestrator. It reads Cargo metadata and lockfiles, experiments in sandboxes, and reports findings. It does not own the build.
 
-## Repo Operating Truth
+---
 
-- `BUILD.md` is the primary handoff, plan, and verification ledger.
-- `README.md` is the public install and workflow summary.
-- `AGENTS.md` is concise repo memory for future contributors and agents.
-- `CONTRIBUTING.md` covers development setup, coding standards, and PR process.
-- If prose and code disagree, the code wins and the docs should be corrected immediately.
-- The main behavioral source of truth is still the implementation and fixture-backed tests, especially:
-  - `src/cli.rs`
-  - `src/lib.rs`
-  - `src/metadata.rs`
-  - `src/compat.rs`
-  - `src/resolution.rs`
-  - `src/manifest_edit.rs`
-  - `src/explain.rs`
-  - `src/report.rs`
-  - `tests/integration_cli.rs`
+## Source-of-truth mapping
 
-## Current Repository Snapshot
+| File | Owns |
+|------|------|
+| `README.md` | Public-facing project description, honest status |
+| `BUILD.md` | Implementation map, phase tracking, decisions, verification ledger |
+| `AGENTS.md` | Concise repo memory for future contributors and agents |
+| `CONTRIBUTING.md` | Development setup, coding standards, PR process |
+| `CHANGELOG.md` | User-facing change history (Keep a Changelog format) |
+| `SECURITY.md` | Security policy and responsible disclosure |
+| `Cargo.toml` | Single-crate package definition, dependency manifest |
+| `deny.toml` | Dependency-policy checks |
+| `.github/workflows/ci.yml` | CI gate definition |
+| `src/cli.rs` | Clap command surface, flags, examples |
+| `src/lib.rs` | Command dispatch, orchestration, output routing |
+| `src/metadata.rs` | Package selection, workspace-member matching, target Rust version |
+| `src/compat.rs` | Compatibility analysis, dependency-path reporting |
+| `src/resolution.rs` | Candidate lockfile generation, diffing, apply semantics |
+| `src/temp_workspace.rs` | Temp-copy support for safe resolution |
+| `src/index.rs` | Sparse-index / local-registry lookup, version selection |
+| `src/manifest_edit.rs` | Conservative manifest suggestion and TOML edits |
+| `src/explain.rs` | Per-package explanation and blocker classification |
+| `src/identity.rs` | Package identity labeling and ambiguity handling |
+| `src/report.rs` | Human, JSON, and Markdown rendering |
+| `tests/integration_cli.rs` | Snapshot-backed CLI integration coverage |
+| `tests/version_selection.rs` | Focused selection-rule coverage |
+| `benches/large_workspace_resolver.rs` | Performance benchmark scope |
 
-### Active root
+**Invariant:** If docs, code, and CLI output ever disagree, the next change must reconcile all three.
 
-- `BUILD.md` - primary operational manual, tracker, and verification ledger
-- `README.md` - public usage and install summary
-- `AGENTS.md` - concise repo memory and architecture notes
-- `CONTRIBUTING.md` - development setup, coding standards, and PR process
-- `CHANGELOG.md` - user-facing change history (Keep a Changelog format)
-- `Cargo.toml` - single-crate package definition for `cargo-compatible` `0.1.0`
-- `Cargo.lock` - repo lockfile
-- `deny.toml` - dependency-policy checks
-- `.github/workflows/ci.yml` - current CI gate
-- `.editorconfig` - editor consistency settings
+---
+
+## Repo snapshot
+
+**Current phase: v0.1 — correctness hardening (Phases 4–5 active)**
+
+What exists:
+- Full command surface: `scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`
+- Fixture-backed integration tests and snapshot coverage
+- CI gate with fmt, clippy, test, nextest, cargo-deny, and benchmark compilation
+- Human, JSON, and Markdown output modes
+- Published on crates.io as `cargo-compatible` 0.1.0
+
+What is actively being hardened:
+- Package-identity disambiguation in dependency-path chains
+- Write-path and mutating-flow coverage
+- True lockfile-only improvement fixture
+
+What does **not** exist yet:
+- Declared and enforced MSRV in CI
+- Formal JSON output schema versioning
+- Windows CI matrix
+- Feature-aware compatibility analysis
+- Project-level config file support
 
 ### Active code and test surfaces
 
@@ -138,38 +172,9 @@ This repository is no longer in a greenfield feature-planning phase. The current
 - release-polish passes that keep the public docs as accurate as the code and snapshots
 - CI hardening and ecosystem integration for real-world adoption
 
-## Source Of Truth By Concern
+---
 
-- CLI flags, argument names, defaults, and examples:
-  - `src/cli.rs`
-- top-level command dispatch and output/file-writing behavior:
-  - `src/lib.rs`
-- package selection, workspace-member selection, query resolution, and target Rust version semantics:
-  - `src/metadata.rs`
-- current dependency-graph analysis and dependency-path reporting:
-  - `src/compat.rs`
-- candidate lockfile generation, diffing, and apply semantics:
-  - `src/resolution.rs`
-  - `src/temp_workspace.rs`
-- crates.io candidate lookup and semver selection behavior:
-  - `src/index.rs`
-- direct dependency suggestion and manifest write behavior:
-  - `src/manifest_edit.rs`
-- explain command behavior and blocker reasoning:
-  - `src/explain.rs`
-- package identity rendering and ambiguity handling:
-  - `src/identity.rs`
-  - `src/report.rs`
-- stable fixture-backed CLI expectations:
-  - `tests/integration_cli.rs`
-- current version-selection rule coverage:
-  - `tests/version_selection.rs`
-- performance benchmark scope:
-  - `benches/large_workspace_resolver.rs`
-- public-facing install and workflow summary:
-  - `README.md`
-
-## Current Architecture And Flow
+## Architecture and flow
 
 ### Command and data flow
 
@@ -194,7 +199,9 @@ This repository is no longer in a greenfield feature-planning phase. The current
 - identity labeling and reporting should clarify ambiguity, not invent false precision.
 - reporting should transform already-derived structures, not re-run business logic.
 
-## Working Rules
+---
+
+## Working rules
 
 1. Read `BUILD.md`, then `README.md`, then `AGENTS.md` before substantial work.
 2. Trust the source files and fixture-backed tests over prose if there is any mismatch.
@@ -209,57 +216,119 @@ This repository is no longer in a greenfield feature-planning phase. The current
 8. Prefer fixture-backed tests and temp-dir integration tests over hand-wavy reasoning for I/O, selection, or write-path behavior.
 9. When a new ambiguity appears, record it in the open-decision or risk sections instead of letting it stay implicit.
 
-## Verification And Quality Gates
+---
 
-### Current enforced CI gate
+## Tracking conventions
+
+Use this language consistently in docs, commits, and issues:
+
+| Term | Meaning |
+|------|---------|
+| **done** | Implemented and verified |
+| **checked** | Verified by command or test output |
+| **planned** | Intentional, not started |
+| **in-progress** | Actively being worked on |
+| **blocked** | Cannot proceed without a decision or dependency |
+| **risk** | Plausible failure mode that could distort the design |
+| **decision** | A durable call with consequences |
+
+When new work lands, update: repo snapshot, phase dashboard, decisions (if architecture changed), and progress log with date and what was verified.
+
+---
+
+## Quality gates
+
+### Enforced CI gate
 
 From `.github/workflows/ci.yml`:
 
-- `cargo fmt --check`
-- `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo deny check`
-- `cargo nextest run`
-- `cargo bench --bench large_workspace_resolver --no-run`
+```bash
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo deny check
+cargo nextest run
+cargo bench --bench large_workspace_resolver --no-run
+```
 
-### Current practical local gate
+### Practical local gate
 
 Use this when making meaningful code changes unless the task is docs-only:
 
-- `cargo fmt --check`
-- `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo test`
-- `cargo nextest run`
-- `cargo-deny check` or `~/.cargo/bin/cargo-deny check`
-- `cargo bench --bench large_workspace_resolver --no-run`
+```bash
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+cargo nextest run
+cargo-deny check
+cargo bench --bench large_workspace_resolver --no-run
+```
 
-### Additional command-change smoke gate
+### Command-change smoke gate
 
-When CLI, analysis, or reporting behavior changes, also run the smallest relevant command-surface checks from the verified set, typically:
+When CLI, analysis, or reporting behavior changes, also run the smallest relevant command-surface checks from the verified set:
 
-- `cargo run -- --help`
-- `cargo run -- scan --manifest-path tests/fixtures/path-too-new/Cargo.toml`
-- `cargo run -- explain too_new --manifest-path tests/fixtures/path-too-new/Cargo.toml`
-- `cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.toml`
+```bash
+cargo run -- --help
+cargo run -- scan --manifest-path tests/fixtures/path-too-new/Cargo.toml
+cargo run -- explain too_new --manifest-path tests/fixtures/path-too-new/Cargo.toml
+cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.toml
+```
 
 ### Write-path expectation
 
 If work changes `apply-lock`, `--write-candidate`, `--write-report`, or `--write-manifests`, the change is not really done until there is direct temp-dir integration coverage or explicitly recorded manual verification.
 
-## Phase Dashboard
+For docs-only changes, verify wording consistency and that repo state matches documented commands. If a gate is temporarily unavailable, document why. Never silently skip.
 
-### Completed Phases
+---
+
+## Dependency strategy
+
+| Crate | Purpose |
+|-------|---------|
+| `clap` | CLI argument parsing with derive macros |
+| `cargo_metadata` | `cargo metadata` loading and workspace introspection |
+| `crates-index` | Sparse-index / local-registry lookup for version selection |
+| `semver` | Rust version and SemVer comparison |
+| `serde` + `serde_json` | Serialization for JSON output and internal data |
+| `toml_edit` | Manifest TOML editing with format preservation |
+| `petgraph` | Dependency graph construction and traversal |
+| `itertools` | Iterator utilities for collection processing |
+| `regex` | Pattern matching in command parsing |
+| `anyhow` + `thiserror` | Error handling and propagation |
+| `tempfile` | Sandbox directory creation for safe resolution |
+| `walkdir` | Directory traversal |
+| `tracing` + `tracing-subscriber` | Opt-in structured logging via `RUST_LOG` |
+
+### Dev dependencies
+
+| Crate | Purpose |
+|-------|---------|
+| `assert_cmd` + `assert_fs` + `predicates` | CLI integration test infrastructure |
+| `insta` | Snapshot testing for CLI output |
+| `criterion` | Performance benchmarking |
+| `proptest` | Property-based testing |
+| `sha2` | Hashing for test determinism |
+
+Every dependency addition must be justified in the decisions log with: what it replaces, what it costs, and whether a lighter alternative exists.
+
+---
+
+## Phase dashboard
+
+### Completed phases
 
 - Phase 0 - repo charter, source-of-truth mapping, and verification baseline. Status: **done**.
 - Phase 1 - core command surface and analysis engine. Status: **done**.
 - Phase 2 - safe resolution and manifest-suggestion workflow. Status: **done**.
 - Phase 3 - reporting, fixtures, CI, and benchmark baseline. Status: **done**.
 
-### Active Phases
+### Active phases
 
 - Phase 4 - correctness hardening for package selection, explain scope, and report semantics. Status: **in progress**.
 - Phase 5 - write-path and mutating-flow coverage. Status: **in progress**.
 
-### Planned Phases
+### Planned phases
 
 - Phase 6 - performance realism and benchmark expansion. Status: **not started**.
 - Phase 7 - release polish and operator trust cleanup. Status: **not started**.
@@ -269,7 +338,9 @@ If work changes `apply-lock`, `--write-candidate`, `--write-report`, or `--write
 - Phase 11 - documentation, examples, and onboarding. Status: **not started**.
 - Phase 12 - community readiness and 1.0 roadmap. Status: **not started**.
 
-## Active Phase Detail
+---
+
+## Active phase detail
 
 ### Phase 4 - correctness hardening for package selection, explain scope, and report semantics
 
@@ -305,7 +376,9 @@ Exit criteria:
 
 - [ ] The highest-risk write paths are verified by tests or explicitly recorded manual proof, not assumed from code reading.
 
-## Planned Phase Detail
+---
+
+## Planned phase detail
 
 ### Phase 6 - performance realism and benchmark expansion
 
@@ -460,7 +533,9 @@ Exit criteria:
 - [ ] Security and stability contracts are documented.
 - [ ] The project is positioned for community contribution and long-term maintenance.
 
-## Currently Verified Commands
+---
+
+## Currently verified commands
 
 These commands are documented in this repository as actually run during the March 20-22, 2026 audit and follow-up passes:
 
@@ -485,17 +560,25 @@ These commands are documented in this repository as actually run during the Marc
 - `cargo test apply_manifest_suggestions_`
 - `cargo test apply_lock_`
 
-## Open Decisions And Unresolved Scope
+---
 
-- How far should `explain` query matching go beyond the current exact package ID, package name, or `name@version` forms if future fixtures expose more ambiguity?
-- How source-aware should resolve and explain reporting become when the same crate name appears from multiple sources or in multiple resolved versions?
-- Should mixed-workspace resolver guidance remain explanatory only for v0.1, or is there a later explicit edit mode worth planning deliberately?
-- Should the tool expose a library API for programmatic use, or stay CLI-only through 1.0?
-- What is the right exit-code contract for CI usage? (0 = clean, 1 = incompatible, 2 = error?)
-- Should config file support land before or after the JSON schema stabilization?
-- How should the tool handle `rust-version` ranges if/when Cargo supports them?
+## Open questions
 
-## Risk Register
+These questions need answers before or during the indicated phase:
+
+| Question | Phase | Impact |
+|----------|-------|--------|
+| How far should `explain` query matching go beyond exact package ID, name, or `name@version`? | 4 | Edge-case UX for ambiguous queries |
+| How source-aware should resolve/explain reporting become for same-name multi-source crates? | 4–5 | Human-facing output clarity |
+| Should mixed-workspace resolver guidance remain explanatory only for v0.1? | 7 | Scope of edit automation |
+| Should the tool expose a library API or stay CLI-only through 1.0? | 12 | API surface commitment |
+| What is the right exit-code contract for CI usage? (0/1/2?) | 9 | CI integration contract |
+| Should config file support land before or after JSON schema stabilization? | 9 | Feature ordering |
+| How should the tool handle `rust-version` ranges if/when Cargo supports them? | 10 | Forward compatibility |
+
+---
+
+## Risk register
 
 - Some human-facing resolve and explain summaries still do not fully disambiguate same-name crates across all multi-source or same-version cases; package IDs remain the escape hatch.
 - A true lockfile-only improvement fixture is still missing; the current temp-copy `cargo update --workspace` strategy preserves existing lockfile choices, so a nontrivial improvement scenario needs a deliberate repro or an explicitly deferred strategy change.
@@ -507,7 +590,9 @@ These commands are documented in this repository as actually run during the Marc
 - Windows compatibility is untested; path handling and temp-workspace logic may have platform-specific bugs.
 - The `crates-index` dependency pins to a specific sparse-index protocol version; future crates.io changes could break lookups silently.
 
-## Immediate Next Moves
+---
+
+## Immediate next moves
 
 1. Extend package-identity disambiguation into dependency-path chains and the harder same-name multi-source cases that still fall back to package IDs.
 2. Add or explicitly defer a fixture that demonstrates a true lockfile-only improvement so the write-path and reporting flow is exercised against a less trivial resolution change.
@@ -515,7 +600,9 @@ These commands are documented in this repository as actually run during the Marc
 4. Declare and enforce an MSRV in Cargo.toml and CI.
 5. Begin planning the v0.2 release scope.
 
-## Progress Log
+---
+
+## Progress log
 
 - 2026-03-22: Restored the fuller `BUILD.md` execution manual after the docs-tightening regression, refreshed `README.md` to stay concise but truthful, and re-synced the public docs with current package-selection, write-report, local-registry, and package-identity behavior. Verified with: `git diff --check`, `cargo run -- --help`. Next: keep the docs aligned while finishing the remaining identity-disambiguation and lockfile-improvement work.
 - 2026-03-22: Added source-aware human report labels for resolved, workspace, and path packages, taught manifest suggestions to read a crates.io local-registry replacement from workspace `.cargo/config.toml`, and added deterministic end-to-end `suggest-manifest --write-manifests` coverage via a local-registry fixture. Verified with: `cargo fmt --check`, `cargo test report::tests:: --lib`, `cargo test --test integration_cli suggest_manifest_write_manifests_uses_local_registry_fixture_end_to_end`, `cargo test --test integration_cli explain_path_dep`, `cargo test --test integration_cli scan_mixed_workspace_human_snapshot`. Stop point: a true lockfile-only improvement fixture is still missing because the current `cargo update --workspace` temp-copy flow preserves existing lockfile selections; that needs a deliberate repro or strategy change, not guesswork. Next: extend package-identity disambiguation into dependency-path chains and identify a credible lockfile-only improvement fixture.
@@ -527,7 +614,9 @@ These commands are documented in this repository as actually run during the Marc
 - 2026-03-21: Re-read the full source tree, tests, benchmark, CI workflow, and repo docs; confirmed the March 20 fixes landed cleanly and found four remaining issues: loose substring-based package matching, out-of-scope `explain` success, `--write-report` ignoring `--format`, and thin direct coverage for mutating or file-output flows. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, `cargo nextest run`, `cargo deny check`, `cargo bench --bench large_workspace_resolver --no-run`, and targeted manual repros for package selection, explain scoping, and `--write-report` behavior. Next: tighten selection and explain-scope semantics, then add write-path coverage.
 - 2026-03-21: Rewrote `BUILD.md` into a fuller execution manual aligned with the maintainer's stronger repo-plan style while keeping `cargo-compatible`-specific behavior, verification history, risks, and next moves intact. Verified with: document audit of the prior `BUILD.md`, `README.md`, `AGENTS.md`, and repository layout. Next: use this plan as the source of truth for the next hardening pass.
 
-## Decision Log
+---
+
+## Decision log
 
 - 2026-03-22: Detailed resolve version changes are omitted when multiple resolved versions share the same package name and source identity; collapsing them into one before or after pair was misleading, so notes should stay conservative rather than fabricate precision.
 - 2026-03-22: `suggest-manifest --write-manifests` stages all targeted edits before atomically persisting each manifest; later lookup failures should not leave earlier manifests partially applied; the mutating path must be safer than a naive sequential write loop.
@@ -542,3 +631,7 @@ These commands are documented in this repository as actually run during the Marc
 - 2026-03-20: Path and git dependencies are analysis and explain surfaces, not fake downgrade-target surfaces; the tool can report them as blockers without inventing crates.io-based edits; suggestion logic should keep that boundary.
 - 2026-03-21: `cargo-deny` duplicate-version findings remain informational warnings under the current policy; useful signal without blocking the repo on transitive dependency churn; dependency-policy tightening can happen later if it becomes materially valuable.
 - 2026-03-21: The active execution focus has shifted from broad feature creation to correctness hardening and confidence-building; the command surface already exists, but edge semantics and write-path trust still need work; prioritize precision and verification over adding new workflow surface area.
+
+---
+
+*Update this log only with things that actually happened.*
