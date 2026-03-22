@@ -8,7 +8,6 @@ use crate::model::{
 };
 use anyhow::Result;
 use itertools::Itertools;
-use std::path::Path;
 
 pub fn render_scan_report(report: &ScanReport, format: OutputFormat) -> Result<String> {
     match format {
@@ -376,7 +375,7 @@ fn render_explain_human(report: &ExplainReport) -> String {
     if let Some(package) = &report.package {
         lines.push(format!(
             "  resolved package: {}",
-            base_package_label(package, Path::new("."))
+            base_package_label(package, &report.workspace_root)
         ));
     }
     if let Some(reason) = &report.current_reason {
@@ -411,7 +410,7 @@ fn render_explain_markdown(report: &ExplainReport) -> String {
     if let Some(package) = &report.package {
         lines.push(format!(
             "- Resolved package: {}",
-            backtick(&base_package_label(package, Path::new(".")))
+            backtick(&base_package_label(package, &report.workspace_root))
         ));
     }
     if let Some(status) = &report.current_status {

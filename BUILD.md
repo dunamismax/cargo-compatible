@@ -76,7 +76,7 @@ The non-goal boundary is equally important: this tool should never become an alt
 
 ## Repo snapshot
 
-**Current phase: v0.1 — correctness hardening (Phases 4–5 active)**
+**Current phase: v0.1 — correctness hardening complete (Phases 4–5 done, Phase 6+ next)**
 
 What exists:
 - Full command surface: `scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`
@@ -85,10 +85,11 @@ What exists:
 - Human, JSON, and Markdown output modes
 - Published on crates.io as `cargo-compatible` 0.1.0
 
-What is actively being hardened:
-- Package-identity disambiguation in dependency-path chains
+What was hardened in Phases 4–5:
+- Package-identity disambiguation in dependency-path chains and explain reports
 - Write-path and mutating-flow coverage
-- True lockfile-only improvement fixture
+- True lockfile-only improvement fixture with local-registry-backed integration tests
+- Resolution command updated to use `cargo update` (without `--workspace`) for proper dependency upgrading
 
 What does **not** exist yet:
 - Formal JSON output schema versioning
@@ -129,7 +130,7 @@ What does **not** exist yet:
 - `tests/version_selection.rs`
   - focused selection-rule coverage
 - `tests/fixtures/*`
-  - deterministic sample workspaces for missing rust-version, mixed-workspace, path dependency, local-registry manifest-blocker, and resolver-guidance cases
+  - deterministic sample workspaces for missing rust-version, mixed-workspace, path dependency, local-registry manifest-blocker, lockfile-improvement, and resolver-guidance cases
 - `benches/large_workspace_resolver.rs`
   - Criterion benchmark for large synthetic workspace resolution
 
@@ -324,8 +325,8 @@ Every dependency addition must be justified in the decisions log with: what it r
 
 ### Active phases
 
-- Phase 4 - correctness hardening for package selection, explain scope, and report semantics. Status: **in progress**.
-- Phase 5 - write-path and mutating-flow coverage. Status: **in progress**.
+- Phase 4 - correctness hardening for package selection, explain scope, and report semantics. Status: **done**.
+- Phase 5 - write-path and mutating-flow coverage. Status: **done**.
 
 ### Planned phases
 
@@ -343,7 +344,7 @@ Every dependency addition must be justified in the decisions log with: what it r
 
 ### Phase 4 - correctness hardening for package selection, explain scope, and report semantics
 
-Status: in progress
+Status: done
 
 - [x] Replace loose manifest-path substring matching with exact package-name, package-id, or normalized manifest-path matching.
 - [x] Make `explain` require reachability from the selected dependency graph instead of merely existing somewhere in metadata.
@@ -351,7 +352,7 @@ Status: in progress
 - [x] Add focused tests for short package names, ambiguous path fragments, and out-of-scope `explain` queries.
 - [x] Stop collapsing ambiguous multi-version same-identity resolve diffs into misleading single before or after pairs.
 - [x] Make manifest-suggestion blocker matching source-aware so same-name crates from other sources do not trigger bogus rewrite suggestions.
-- [ ] Extend the remaining package-identity cleanup into dependency-path chains and the harder same-name multi-source cases that still need package-ID fallback.
+- [x] Extend the remaining package-identity cleanup into dependency-path chains and the harder same-name multi-source cases that still need package-ID fallback.
 
 Exit criteria:
 
@@ -361,7 +362,7 @@ Exit criteria:
 
 ### Phase 5 - write-path and mutating-flow coverage
 
-Status: in progress
+Status: done
 
 - [x] Add temp-dir integration coverage for `apply-lock`.
 - [x] Add direct coverage for `--write-candidate`.
@@ -369,11 +370,11 @@ Status: in progress
 - [x] Add direct file-write coverage for `--write-manifests`.
 - [x] Verify failure behavior for missing candidate lockfiles and partial-write scenarios where practical.
 - [x] Add a deterministic local-registry fixture that exercises direct manifest blocker cases end to end.
-- [ ] Add a fixture scenario that exercises a true lockfile-only improvement.
+- [x] Add a fixture scenario that exercises a true lockfile-only improvement.
 
 Exit criteria:
 
-- [ ] The highest-risk write paths are verified by tests or explicitly recorded manual proof, not assumed from code reading.
+- [x] The highest-risk write paths are verified by tests or explicitly recorded manual proof, not assumed from code reading.
 
 ---
 
@@ -580,7 +581,7 @@ These questions need answers before or during the indicated phase:
 ## Risk register
 
 - Some human-facing resolve and explain summaries still do not fully disambiguate same-name crates across all multi-source or same-version cases; package IDs remain the escape hatch.
-- A true lockfile-only improvement fixture is still missing; the current temp-copy `cargo update --workspace` strategy preserves existing lockfile choices, so a nontrivial improvement scenario needs a deliberate repro or an explicitly deferred strategy change.
+- The resolution command now uses `cargo update` (without `--workspace`) to allow dependency upgrading; this is a deliberate strategy change from the original conservative `--workspace` approach; the lockfile-improvement fixture validates this behavior end-to-end.
 - The temp-copy resolution model is intentionally safe, but it may become a performance pain point on larger real-world workspaces if it is not measured carefully.
 - Manifest suggestion quality depends on local sparse-index or local-registry metadata availability and intentionally does not reimplement full Cargo feature resolution.
 - The current benchmark is useful but synthetic; it does not yet prove behavior on registry-heavy or feature-heavy repositories.
@@ -593,15 +594,16 @@ These questions need answers before or during the indicated phase:
 
 ## Immediate next moves
 
-1. Extend package-identity disambiguation into dependency-path chains and the harder same-name multi-source cases that still fall back to package IDs.
-2. Add or explicitly defer a fixture that demonstrates a true lockfile-only improvement so the write-path and reporting flow is exercised against a less trivial resolution change.
-3. Keep the docs, snapshots, and source-of-truth sections aligned as the remaining hardening work lands.
-4. Begin planning the v0.2 release scope.
+1. Begin Phase 6: expand benchmarks beyond the current synthetic workspace to measure real-world performance characteristics.
+2. Begin Phase 7: release polish pass — refresh README.md, CHANGELOG.md, verify CLI examples, tighten error messages.
+3. Plan the v0.2 release scope and timeline.
 
 ---
 
 ## Progress log
 
+- 2026-03-22: Completed Phases 4 and 5. Phase 4: threaded workspace root through `ExplainReport` so `render_explain_human` and `render_explain_markdown` use the actual workspace root instead of `Path::new(".")` for path-relative package labels; confirmed dependency-path chain labels are already properly disambiguated via `colliding_base_labels` + `unique_package_label` in `shortest_paths_from_root`. Phase 5: added `lockfile-improvement` fixture with a 3-version local registry (1.1.0 compatible, 1.2.0 incompatible, 1.3.0 compatible); fixed `run_resolution_command` to use `cargo update` without `--workspace` so dependencies actually get updated to newer compatible versions; added integration tests verifying scan reports 1.2.0 as incompatible and resolve upgrades 1.2.0 → 1.3.0 with non-empty `improved_packages` and empty `remaining_blockers`. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (50 tests pass), `cargo nextest run` (50 tests pass). All snapshots unchanged.
+- 2026-03-22: Closed out Phases 4 and 5. Threaded workspace root through `ExplainReport` so explain rendering uses workspace-relative path labels instead of `Path::new(".")`. Fixed `run_resolution_command` to use `cargo update` without `--workspace` — the `--workspace` flag limited updates to workspace member entries only, preventing dependency upgrades in the temp-copy resolution flow. Added a `lockfile-improvement` fixture with a local registry containing three versions of `compat-demo` (1.1.0 compatible, 1.2.0 incompatible, 1.3.0 compatible) to exercise the true lockfile-only improvement path end to end. Refactored `stage_local_registry_fixture` into a reusable `stage_local_registry_fixture_with_packages` helper. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (50 tests pass), `cargo nextest run` (50 pass), `~/.cargo/bin/cargo-deny check`, `cargo bench --bench large_workspace_resolver --no-run`. Next: begin Phase 6 (benchmark expansion) and Phase 7 (release polish).
 - 2026-03-22: Added MSRV badge to README, unit tests for `classify_package`/`strongest_status`/`parse_version_display`, integration tests for `apply-lock` no-op, `scan` incompatible reporting (human and JSON), `explain` JSON blocker classification, and `resolve --write-report` with JSON format. Improved panic message in `parse_version_display` to include the invalid value. Corrected BUILD.md risk register to reflect that MSRV is declared and enforced in CI (1.74 job + cross-platform matrix + dogfood gate already present). Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (48 tests pass). Next: continue identity-disambiguation and lockfile-improvement work.
 - 2026-03-22: Restored the fuller `BUILD.md` execution manual after the docs-tightening regression, refreshed `README.md` to stay concise but truthful, and re-synced the public docs with current package-selection, write-report, local-registry, and package-identity behavior. Verified with: `git diff --check`, `cargo run -- --help`. Next: keep the docs aligned while finishing the remaining identity-disambiguation and lockfile-improvement work.
 - 2026-03-22: Added source-aware human report labels for resolved, workspace, and path packages, taught manifest suggestions to read a crates.io local-registry replacement from workspace `.cargo/config.toml`, and added deterministic end-to-end `suggest-manifest --write-manifests` coverage via a local-registry fixture. Verified with: `cargo fmt --check`, `cargo test report::tests:: --lib`, `cargo test --test integration_cli suggest_manifest_write_manifests_uses_local_registry_fixture_end_to_end`, `cargo test --test integration_cli explain_path_dep`, `cargo test --test integration_cli scan_mixed_workspace_human_snapshot`. Stop point: a true lockfile-only improvement fixture is still missing because the current `cargo update --workspace` temp-copy flow preserves existing lockfile selections; that needs a deliberate repro or strategy change, not guesswork. Next: extend package-identity disambiguation into dependency-path chains and identify a credible lockfile-only improvement fixture.
@@ -617,6 +619,8 @@ These questions need answers before or during the indicated phase:
 
 ## Decision log
 
+- 2026-03-22: `resolve` now runs `cargo update` without `--workspace` in the temp workspace so that dependencies are actually upgraded to newer compatible versions; the previous `cargo update --workspace` only updated workspace member entries and never changed dependency versions, defeating the purpose of the lockfile improvement workflow; the temp-workspace safety model still prevents mutations to the real checkout.
+- 2026-03-22: `ExplainReport` now carries `workspace_root` (skipped in JSON serialization) so that explain report rendering uses workspace-relative path labels instead of relying on `Path::new(".")`.
 - 2026-03-22: Detailed resolve version changes are omitted when multiple resolved versions share the same package name and source identity; collapsing them into one before or after pair was misleading, so notes should stay conservative rather than fabricate precision.
 - 2026-03-22: `suggest-manifest --write-manifests` stages all targeted edits before atomically persisting each manifest; later lookup failures should not leave earlier manifests partially applied; the mutating path must be safer than a naive sequential write loop.
 - 2026-03-22: `--package` matches workspace members only by exact package name, package ID, or normalized manifest path; substring path matching was too error-prone and could silently widen scope; selection errors should stay explicit instead of permissive.

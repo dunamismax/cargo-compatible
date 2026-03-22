@@ -165,7 +165,7 @@ fn run_resolution_command(workspace_root: &Path, manifest_path: &Path) -> Result
         "generate-lockfile"
     };
     if lockfile.exists() {
-        command.args(["update", "--workspace", "--manifest-path"]);
+        command.args(["update", "--manifest-path"]);
     } else {
         command.args(["generate-lockfile", "--manifest-path"]);
     }

@@ -37,24 +37,33 @@ struct LocalRegistryPackage {
 }
 
 fn stage_local_registry_fixture(workspace_fixture: &str) -> LocalRegistryFixture {
+    stage_local_registry_fixture_with_packages(
+        workspace_fixture,
+        &[
+            LocalRegistryPackage {
+                name: "compat-demo",
+                version: "1.1.0",
+                rust_version: "1.60",
+            },
+            LocalRegistryPackage {
+                name: "compat-demo",
+                version: "1.2.0",
+                rust_version: "1.70",
+            },
+        ],
+    )
+}
+
+fn stage_local_registry_fixture_with_packages(
+    workspace_fixture: &str,
+    packages: &[LocalRegistryPackage],
+) -> LocalRegistryFixture {
     let temp = tempdir().unwrap();
     let workspace_root = temp.path().join("workspace");
     copy_dir_all(&fixture(workspace_fixture), &workspace_root);
 
     let registry_root = temp.path().join("local-registry");
-    let packages = [
-        LocalRegistryPackage {
-            name: "compat-demo",
-            version: "1.1.0",
-            rust_version: "1.60",
-        },
-        LocalRegistryPackage {
-            name: "compat-demo",
-            version: "1.2.0",
-            rust_version: "1.70",
-        },
-    ];
-    build_local_registry(&registry_root, &packages);
+    build_local_registry(&registry_root, packages);
     write_local_registry_config(&workspace_root, &registry_root);
 
     let cargo_home = temp.path().join("cargo-home");
@@ -947,4 +956,161 @@ fn apply_lock_rejects_missing_candidate_lockfile() {
     let stderr = String::from_utf8(output).unwrap();
     assert!(stderr.contains("candidate lockfile"));
     assert!(stderr.contains("does not exist"));
+}
+
+#[test]
+fn lockfile_improvement_scan_reports_incompatible() {
+    let fixture = stage_lockfile_improvement_fixture();
+    let output = bin()
+        .current_dir(&fixture.workspace_root)
+        .env("CARGO_HOME", &fixture.cargo_home)
+        .args([
+            "scan",
+            "--manifest-path",
+            fixture.workspace_root.join("Cargo.toml").to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let value: Value = serde_json::from_slice(&output).unwrap();
+
+    let incompatible = value
+        .get("incompatible_packages")
+        .and_then(Value::as_array)
+        .expect("incompatible_packages should exist");
+    assert!(
+        !incompatible.is_empty(),
+        "scan should report compat-demo 1.2.0 as incompatible"
+    );
+    let compat_demo = incompatible
+        .iter()
+        .find(|p| {
+            p.pointer("/package/name").and_then(Value::as_str) == Some("compat-demo")
+                && p.pointer("/package/version").and_then(Value::as_str) == Some("1.2.0")
+        })
+        .expect("compat-demo 1.2.0 should be in incompatible packages");
+    assert_eq!(
+        compat_demo.pointer("/status").and_then(Value::as_str),
+        Some("incompatible")
+    );
+}
+
+#[test]
+fn lockfile_improvement_resolve_upgrades_to_compatible_version() {
+    let fixture = stage_lockfile_improvement_fixture();
+    let output = bin()
+        .current_dir(&fixture.workspace_root)
+        .env("CARGO_HOME", &fixture.cargo_home)
+        .args([
+            "resolve",
+            "--manifest-path",
+            fixture.workspace_root.join("Cargo.toml").to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let value: Value = serde_json::from_slice(&output).unwrap();
+
+    // Verify version_changes shows 1.2.0 → 1.3.0
+    let changes = value
+        .get("version_changes")
+        .and_then(Value::as_array)
+        .expect("version_changes should exist");
+    let upgrade = changes
+        .iter()
+        .find(|c| {
+            c.get("package_name").and_then(Value::as_str) == Some("compat-demo")
+                && c.get("before").and_then(Value::as_str) == Some("1.2.0")
+                && c.get("after").and_then(Value::as_str) == Some("1.3.0")
+        })
+        .expect("should show compat-demo upgrade from 1.2.0 to 1.3.0");
+    assert_eq!(
+        upgrade.get("package_name").and_then(Value::as_str),
+        Some("compat-demo")
+    );
+
+    // Verify improved_packages is non-empty
+    let improved = value
+        .get("improved_packages")
+        .and_then(Value::as_array)
+        .expect("improved_packages should exist");
+    assert!(
+        !improved.is_empty(),
+        "improved_packages should contain compat-demo"
+    );
+
+    // Verify remaining_blockers is empty (the upgrade fully resolves the issue)
+    let blockers = value
+        .get("remaining_blockers")
+        .and_then(Value::as_array)
+        .expect("remaining_blockers should exist");
+    assert!(
+        blockers.is_empty(),
+        "remaining_blockers should be empty after lockfile improvement, got: {blockers:?}"
+    );
+}
+
+fn stage_lockfile_improvement_fixture() -> LocalRegistryFixture {
+    let packages = [
+        LocalRegistryPackage {
+            name: "compat-demo",
+            version: "1.1.0",
+            rust_version: "1.60",
+        },
+        LocalRegistryPackage {
+            name: "compat-demo",
+            version: "1.2.0",
+            rust_version: "1.70",
+        },
+        LocalRegistryPackage {
+            name: "compat-demo",
+            version: "1.3.0",
+            rust_version: "1.60",
+        },
+    ];
+    let fixture = stage_local_registry_fixture_with_packages("lockfile-improvement", &packages);
+
+    // Generate a lockfile pinned to 1.2.0 by temporarily using an exact version requirement
+    let manifest_path = fixture.workspace_root.join("Cargo.toml");
+    let original_manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(
+        &manifest_path,
+        original_manifest.replace("compat-demo = \">=1.0\"", "compat-demo = \"=1.2.0\""),
+    )
+    .unwrap();
+
+    let status = ProcessCommand::new("cargo")
+        .args([
+            "generate-lockfile",
+            "--manifest-path",
+            manifest_path.to_str().unwrap(),
+        ])
+        .env("CARGO_HOME", &fixture.cargo_home)
+        .current_dir(&fixture.workspace_root)
+        .status()
+        .unwrap();
+    assert!(
+        status.success(),
+        "cargo generate-lockfile should succeed for lockfile-improvement fixture"
+    );
+
+    // Verify lockfile pins 1.2.0
+    let lockfile = fs::read_to_string(fixture.workspace_root.join("Cargo.lock")).unwrap();
+    assert!(
+        lockfile.contains("name = \"compat-demo\"") && lockfile.contains("version = \"1.2.0\""),
+        "generated lockfile should pin compat-demo at 1.2.0"
+    );
+
+    // Restore the original manifest with the loose requirement
+    fs::write(&manifest_path, original_manifest).unwrap();
+
+    fixture
 }

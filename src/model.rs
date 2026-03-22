@@ -147,6 +147,8 @@ pub struct ExplainReport {
     pub candidate_status: Option<CompatibilityStatus>,
     pub blocker: Option<BlockerKind>,
     pub notes: Vec<String>,
+    #[serde(skip)]
+    pub workspace_root: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize)]

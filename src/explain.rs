@@ -65,6 +65,7 @@ pub fn build_explain_report(
         candidate_status,
         blocker,
         notes,
+        workspace_root: workspace.workspace_root.clone(),
     })
 }
 
