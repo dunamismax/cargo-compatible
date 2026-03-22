@@ -1,6 +1,6 @@
 use crate::cli::ExplainCommand;
 use crate::compat::analyze_current_workspace;
-use crate::metadata::package_id_from_query;
+use crate::metadata::resolve_package_query;
 use crate::model::{
     BlockerKind, CompatibilityStatus, ExplainReport, PackageIssue, Selection, WorkspaceData,
 };
@@ -12,14 +12,8 @@ pub fn build_explain_report(
     selection: &Selection,
     command: &ExplainCommand,
 ) -> Result<ExplainReport> {
-    let package_id = package_id_from_query(workspace, &command.query)
-        .map(|id| id.repr.clone())
-        .ok_or_else(|| {
-            anyhow!(
-                "query `{}` did not match any resolved package",
-                command.query
-            )
-        })?;
+    let selected_graph = selected_graph_package_ids(workspace, selection);
+    let package_id = resolve_package_query(workspace, &selected_graph, &command.query)?;
     let current = analyze_current_workspace(workspace, selection)?;
     let package = workspace
         .packages_by_id
@@ -47,13 +41,7 @@ pub fn build_explain_report(
         let candidate_issue = find_issue(&resolve.candidate, &package_id);
         candidate_version = candidate_issue
             .map(|issue| issue.package.version.to_string())
-            .or_else(|| {
-                resolve
-                    .version_changes
-                    .iter()
-                    .find(|change| change.package_name == package.name)
-                    .and_then(|change| change.after.clone())
-            });
+            .or_else(|| candidate_version_from_changes(&package, &resolve.version_changes));
         candidate_status = candidate_issue.map(|issue| issue.status.clone());
         notes = resolve.notes;
         blocker = classify_blocker(Some(&package), current_issue, candidate_issue, selection);
@@ -89,6 +77,44 @@ fn find_issue<'a>(
         .iter()
         .chain(report.unknown_packages.iter())
         .find(|issue| issue.package.id == package_id)
+}
+
+fn selected_graph_package_ids(
+    workspace: &WorkspaceData,
+    selection: &Selection,
+) -> std::collections::BTreeSet<String> {
+    let mut reachable = std::collections::BTreeSet::new();
+    let mut queue = std::collections::VecDeque::from_iter(
+        selection
+            .members
+            .iter()
+            .map(|member| member.package_id.clone()),
+    );
+
+    while let Some(package_id) = queue.pop_front() {
+        if !reachable.insert(package_id.clone()) {
+            continue;
+        }
+        for dependency_id in workspace.graph.get(&package_id).into_iter().flatten() {
+            queue.push_back(dependency_id.clone());
+        }
+    }
+
+    reachable
+}
+
+fn candidate_version_from_changes(
+    package: &crate::model::ResolvedPackage,
+    changes: &[crate::model::CandidateVersionChange],
+) -> Option<String> {
+    let mut matching_changes = changes
+        .iter()
+        .filter(|change| change.package_name == package.name && change.source == package.source);
+    let change = matching_changes.next()?;
+    if matching_changes.next().is_some() {
+        return None;
+    }
+    change.after.clone()
 }
 
 fn classify_blocker(

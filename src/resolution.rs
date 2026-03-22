@@ -43,18 +43,19 @@ pub fn build_candidate_resolution(
     } else {
         None
     };
-    let version_changes = compute_version_changes(workspace, &candidate_workspace);
+    let (version_changes, ambiguous_version_changes) =
+        compute_version_changes(workspace, &candidate_workspace);
     let current_problem_ids = current
         .incompatible_packages
         .iter()
         .chain(current.unknown_packages.iter())
-        .map(|issue| issue.package.name.clone())
+        .map(|issue| package_label(&issue.package))
         .collect::<BTreeSet<_>>();
     let candidate_problem_ids = candidate
         .incompatible_packages
         .iter()
         .chain(candidate.unknown_packages.iter())
-        .map(|issue| issue.package.name.clone())
+        .map(|issue| package_label(&issue.package))
         .collect::<BTreeSet<_>>();
     let improved_packages = current_problem_ids
         .difference(&candidate_problem_ids)
@@ -62,8 +63,14 @@ pub fn build_candidate_resolution(
         .collect::<Vec<_>>();
     let remaining_blockers = candidate_problem_ids.into_iter().collect::<Vec<_>>();
     let mut notes = workspace.recommendations.clone();
-    if version_changes.is_empty() {
+    if version_changes.is_empty() && ambiguous_version_changes.is_empty() {
         notes.push("candidate lockfile did not change the resolved dependency graph".to_string());
+    }
+    if !ambiguous_version_changes.is_empty() {
+        notes.push(format!(
+            "omitted detailed version change reporting for {} because multiple resolved versions shared the same package identity",
+            ambiguous_version_changes.join(", ")
+        ));
     }
 
     info!(
@@ -154,53 +161,68 @@ fn manifest_in_temp(real_root: &Path, temp_root: &Path, real_manifest: &Path) ->
 fn compute_version_changes(
     current: &WorkspaceData,
     candidate: &WorkspaceData,
-) -> Vec<CandidateVersionChange> {
+) -> (Vec<CandidateVersionChange>, Vec<String>) {
     compute_version_changes_from_packages(&current.packages_by_id, &candidate.packages_by_id)
 }
 
 fn compute_version_changes_from_packages(
     current_packages: &BTreeMap<String, crate::model::ResolvedPackage>,
     candidate_packages: &BTreeMap<String, crate::model::ResolvedPackage>,
-) -> Vec<CandidateVersionChange> {
-    let mut current_versions = BTreeMap::new();
-    for package in current_packages.values() {
-        current_versions.insert(
-            (package.name.clone(), package.source.clone()),
-            package.version.to_string(),
-        );
-    }
-    let mut candidate_versions = BTreeMap::new();
-    for package in candidate_packages.values() {
-        candidate_versions.insert(
-            (package.name.clone(), package.source.clone()),
-            package.version.to_string(),
-        );
-    }
+) -> (Vec<CandidateVersionChange>, Vec<String>) {
+    let current_versions = grouped_versions_by_identity(current_packages);
+    let candidate_versions = grouped_versions_by_identity(candidate_packages);
 
     let keys = current_versions
         .keys()
         .chain(candidate_versions.keys())
         .cloned()
         .collect::<BTreeSet<_>>();
-    keys.into_iter()
-        .filter_map(|(name, source)| {
-            let before = current_versions
-                .get(&(name.clone(), source.clone()))
-                .cloned();
-            let after = candidate_versions
-                .get(&(name.clone(), source.clone()))
-                .cloned();
-            if before == after {
-                return None;
-            }
-            Some(CandidateVersionChange {
+    let mut changes = Vec::new();
+    let mut ambiguous = Vec::new();
+    for (name, source) in keys {
+        let before_versions = current_versions
+            .get(&(name.clone(), source.clone()))
+            .cloned()
+            .unwrap_or_default();
+        let after_versions = candidate_versions
+            .get(&(name.clone(), source.clone()))
+            .cloned()
+            .unwrap_or_default();
+        if before_versions == after_versions {
+            continue;
+        }
+        if before_versions.len() <= 1 && after_versions.len() <= 1 {
+            changes.push(CandidateVersionChange {
                 package_name: name,
                 source,
-                before,
-                after,
-            })
-        })
-        .collect()
+                before: before_versions.into_iter().next(),
+                after: after_versions.into_iter().next(),
+            });
+        } else {
+            ambiguous.push(package_identity_label(&name, source.as_deref()));
+        }
+    }
+    (changes, ambiguous)
+}
+
+fn grouped_versions_by_identity(
+    packages: &BTreeMap<String, crate::model::ResolvedPackage>,
+) -> BTreeMap<(String, Option<String>), BTreeSet<String>> {
+    let mut versions = BTreeMap::new();
+    for package in packages.values() {
+        versions
+            .entry((package.name.clone(), package.source.clone()))
+            .or_insert_with(BTreeSet::new)
+            .insert(package.version.to_string());
+    }
+    versions
+}
+
+fn package_identity_label(name: &str, source: Option<&str>) -> String {
+    match source {
+        Some(source) => format!("{name} ({source})"),
+        None => name.to_string(),
+    }
 }
 
 fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
@@ -229,9 +251,16 @@ fn diff_summary(before: &str, after: &str) -> String {
     format!("package entries: {before_count} -> {after_count}")
 }
 
+fn package_label(package: &crate::model::ResolvedPackage) -> String {
+    match package.source.as_deref() {
+        Some(source) => format!("{}@{} ({source})", package.name, package.version),
+        None => format!("{}@{}", package.name, package.version),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::compute_version_changes_from_packages;
+    use super::{compute_version_changes_from_packages, package_identity_label};
     use crate::model::{PackageSourceKind, ResolvedPackage};
     use proptest::collection::btree_map;
     use proptest::prelude::*;
@@ -263,30 +292,40 @@ mod tests {
         specs
             .iter()
             .map(|(id, spec)| {
-                let package_id = format!("pkg-{id}");
-                let package_name = format!("crate_{id}");
-                (
-                    package_id.clone(),
-                    ResolvedPackage {
-                        id: package_id,
-                        name: package_name,
-                        version: Version::new(spec.version.0, spec.version.1, spec.version.2),
-                        source: spec.source.map(str::to_string),
-                        source_kind: match spec.source {
-                            Some(source) if source.starts_with("registry+") => {
-                                PackageSourceKind::Registry
-                            }
-                            Some(source) if source.starts_with("git+") => PackageSourceKind::Git,
-                            Some(_) => PackageSourceKind::Unknown,
-                            None => PackageSourceKind::Path,
-                        },
-                        manifest_path: PathBuf::from("Cargo.toml"),
-                        rust_version: Some("1.70".to_string()),
-                        workspace_member: false,
-                    },
+                resolved_package(
+                    &format!("pkg-{id}"),
+                    &format!("crate_{id}"),
+                    spec.version,
+                    spec.source,
                 )
             })
             .collect()
+    }
+
+    fn resolved_package(
+        id: &str,
+        name: &str,
+        version: (u64, u64, u64),
+        source: Option<&str>,
+    ) -> (String, ResolvedPackage) {
+        (
+            id.to_string(),
+            ResolvedPackage {
+                id: id.to_string(),
+                name: name.to_string(),
+                version: Version::new(version.0, version.1, version.2),
+                source: source.map(str::to_string),
+                source_kind: match source {
+                    Some(source) if source.starts_with("registry+") => PackageSourceKind::Registry,
+                    Some(source) if source.starts_with("git+") => PackageSourceKind::Git,
+                    Some(_) => PackageSourceKind::Unknown,
+                    None => PackageSourceKind::Path,
+                },
+                manifest_path: PathBuf::from("Cargo.toml"),
+                rust_version: Some("1.70".to_string()),
+                workspace_member: false,
+            },
+        )
     }
 
     proptest! {
@@ -297,7 +336,8 @@ mod tests {
         ) {
             let current_packages = package_map(&current);
             let candidate_packages = package_map(&candidate);
-            let changes = compute_version_changes_from_packages(&current_packages, &candidate_packages);
+            let (changes, ambiguous) =
+                compute_version_changes_from_packages(&current_packages, &candidate_packages);
 
             let mut expected = BTreeMap::new();
             for package in current_packages.values() {
@@ -325,6 +365,72 @@ mod tests {
                 .collect::<BTreeMap<_, _>>();
 
             prop_assert_eq!(actual, expected);
+            prop_assert!(ambiguous.is_empty());
         }
+    }
+
+    #[test]
+    fn version_change_diff_omits_ambiguous_same_name_same_source_versions() {
+        let registry = Some("registry+https://github.com/rust-lang/crates.io-index");
+        let current = BTreeMap::from([
+            resolved_package("pkg-a", "shared", (1, 0, 0), registry),
+            resolved_package("pkg-b", "shared", (2, 0, 0), registry),
+        ]);
+        let candidate = BTreeMap::from([resolved_package("pkg-c", "shared", (1, 0, 0), registry)]);
+
+        let (changes, ambiguous) = compute_version_changes_from_packages(&current, &candidate);
+
+        assert!(changes.is_empty());
+        assert_eq!(
+            ambiguous,
+            vec![package_identity_label(
+                "shared",
+                Some("registry+https://github.com/rust-lang/crates.io-index")
+            )]
+        );
+    }
+
+    #[test]
+    fn version_change_diff_keeps_same_name_different_sources_separate() {
+        let current = BTreeMap::from([
+            resolved_package(
+                "pkg-a",
+                "shared",
+                (1, 0, 0),
+                Some("registry+https://github.com/rust-lang/crates.io-index"),
+            ),
+            resolved_package(
+                "pkg-b",
+                "shared",
+                (1, 0, 0),
+                Some("git+https://example.invalid/repo"),
+            ),
+        ]);
+        let candidate = BTreeMap::from([
+            resolved_package(
+                "pkg-a2",
+                "shared",
+                (0, 9, 0),
+                Some("registry+https://github.com/rust-lang/crates.io-index"),
+            ),
+            resolved_package(
+                "pkg-b2",
+                "shared",
+                (1, 0, 0),
+                Some("git+https://example.invalid/repo"),
+            ),
+        ]);
+
+        let (changes, ambiguous) = compute_version_changes_from_packages(&current, &candidate);
+
+        assert!(ambiguous.is_empty());
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].package_name, "shared");
+        assert_eq!(
+            changes[0].source.as_deref(),
+            Some("registry+https://github.com/rust-lang/crates.io-index")
+        );
+        assert_eq!(changes[0].before.as_deref(), Some("1.0.0"));
+        assert_eq!(changes[0].after.as_deref(), Some("0.9.0"));
     }
 }

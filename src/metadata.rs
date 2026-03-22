@@ -4,7 +4,7 @@ use crate::model::{
     TargetSelectionMode, WorkspaceData,
 };
 use anyhow::{anyhow, bail, Context, Result};
-use cargo_metadata::{Metadata, MetadataCommand, Package, PackageId};
+use cargo_metadata::{Metadata, MetadataCommand, Package};
 use semver::Version;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -212,25 +212,88 @@ fn match_selected_packages(metadata: &Metadata, specs: &[String]) -> Result<Vec<
         .iter()
         .map(|id| id.repr.clone())
         .collect::<BTreeSet<_>>();
+    let workspace_members = metadata
+        .packages
+        .iter()
+        .filter(|package| workspace_member_ids.contains(&package.id.repr))
+        .collect::<Vec<_>>();
+    let cwd = std::env::current_dir()
+        .context("failed to determine current directory for package selection")?;
     let mut matched = BTreeSet::new();
     for spec in specs {
-        let candidates = metadata
-            .packages
-            .iter()
-            .filter(|package| {
-                workspace_member_ids.contains(&package.id.repr)
-                    && (package.name.to_string() == *spec
-                        || package.id.repr == *spec
-                        || package.manifest_path.as_str().contains(spec))
-            })
-            .map(|package| package.id.repr.clone())
-            .collect::<Vec<_>>();
-        if candidates.is_empty() {
-            bail!("package spec `{spec}` did not match any workspace member");
-        }
-        matched.extend(candidates);
+        matched.insert(resolve_workspace_member_spec(
+            &workspace_members,
+            spec,
+            &cwd,
+        )?);
     }
     Ok(matched.into_iter().collect())
+}
+
+fn resolve_workspace_member_spec(
+    workspace_members: &[&Package],
+    spec: &str,
+    cwd: &Path,
+) -> Result<String> {
+    if let Some(package) = workspace_members
+        .iter()
+        .find(|package| package.id.repr == spec)
+    {
+        return Ok(package.id.repr.clone());
+    }
+
+    let name_matches = workspace_members
+        .iter()
+        .filter(|package| package.name.as_str() == spec)
+        .collect::<Vec<_>>();
+    if let [package] = name_matches.as_slice() {
+        return Ok(package.id.repr.clone());
+    }
+    if name_matches.len() > 1 {
+        bail!(
+            "package spec `{spec}` matched multiple workspace members by name; use an exact package ID or manifest path"
+        );
+    }
+
+    if let Some(spec_path) = normalize_package_spec_path(spec, cwd) {
+        let path_matches = workspace_members
+            .iter()
+            .filter_map(|package| {
+                normalize_existing_path(package.manifest_path.as_std_path())
+                    .filter(|manifest_path| manifest_path == &spec_path)
+                    .map(|_| package.id.repr.clone())
+            })
+            .collect::<Vec<_>>();
+        if let [package_id] = path_matches.as_slice() {
+            return Ok(package_id.clone());
+        }
+        if path_matches.len() > 1 {
+            bail!(
+                "package spec `{spec}` matched multiple workspace members by manifest path; use an exact package ID"
+            );
+        }
+    }
+
+    bail!(
+        "package spec `{spec}` did not match any workspace member by exact package name, package ID, or manifest path"
+    );
+}
+
+fn normalize_package_spec_path(spec: &str, cwd: &Path) -> Option<PathBuf> {
+    let candidate = Path::new(spec);
+    if !candidate.is_absolute() && candidate.components().count() == 1 && !spec.ends_with(".toml") {
+        return None;
+    }
+    let candidate = if candidate.is_absolute() {
+        candidate.to_path_buf()
+    } else {
+        cwd.join(candidate)
+    };
+    normalize_existing_path(&candidate)
+}
+
+fn normalize_existing_path(path: &Path) -> Option<PathBuf> {
+    fs::canonicalize(path).ok()
 }
 
 fn package_to_resolved(package: &Package, metadata: &Metadata) -> Result<ResolvedPackage> {
@@ -301,18 +364,34 @@ fn workspace_resolver(path: &Path) -> Result<Option<String>> {
     Ok(workspace.or(package))
 }
 
-pub fn package_id_from_query<'a>(
-    workspace: &'a WorkspaceData,
+pub fn resolve_package_query(
+    workspace: &WorkspaceData,
+    allowed_package_ids: &BTreeSet<String>,
     query: &str,
-) -> Option<&'a PackageId> {
-    workspace
+) -> Result<String> {
+    if allowed_package_ids.contains(query) {
+        return Ok(query.to_string());
+    }
+
+    let candidates = workspace
         .metadata
         .packages
         .iter()
-        .find(|package| {
-            package.id.repr == query
-                || package.name.to_string() == query
+        .filter(|package| allowed_package_ids.contains(&package.id.repr))
+        .filter(|package| {
+            package.name.as_str() == query
                 || format!("{}@{}", package.name, package.version) == query
         })
-        .map(|package| &package.id)
+        .map(|package| package.id.repr.clone())
+        .collect::<Vec<_>>();
+
+    match candidates.as_slice() {
+        [] => bail!(
+            "query `{query}` did not match any package in the selected dependency graph"
+        ),
+        [package_id] => Ok(package_id.clone()),
+        _ => bail!(
+            "query `{query}` matched multiple packages in the selected dependency graph; use an exact package ID or name@version"
+        ),
+    }
 }

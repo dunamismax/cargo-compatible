@@ -42,7 +42,11 @@ pub struct SelectionArgs {
     pub rust_version: Option<String>,
     #[arg(long)]
     pub workspace: bool,
-    #[arg(long = "package", short = 'p')]
+    #[arg(
+        long = "package",
+        short = 'p',
+        help = "Select workspace members by exact package name, package ID, or manifest path"
+    )]
     pub package: Vec<String>,
 }
 
@@ -62,7 +66,10 @@ pub struct ResolveCommand {
     pub format: OutputFormat,
     #[arg(long = "write-candidate")]
     pub write_candidate: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Write the rendered resolve report using the selected --format"
+    )]
     pub write_report: Option<PathBuf>,
 }
 

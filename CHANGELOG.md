@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Tightened `--package` to use exact workspace member name/package-ID/manifest-path matching instead of manifest-path substring matches.
+- Made `explain` reject queries outside the selected dependency graph and clarified ambiguous-query guidance.
+- Made `resolve --write-report` write the same rendered format selected by `--format`, and added direct integration coverage for report/candidate write flows.
+- Added direct `apply-lock` coverage, direct manifest-write coverage, and failure-path coverage for missing candidate lockfiles and partial manifest-apply scenarios.
+- Hardened package identity handling by avoiding collapsed multi-version resolve diffs for the same package identity and by matching manifest suggestions on package name plus source instead of name alone.
 - Added opt-in `tracing` initialization and instrumentation around metadata loading, workspace analysis, registry candidate selection, and temporary resolution runs.
 - Added `cargo-deny` policy configuration in `deny.toml` and CI coverage for dependency-policy checks.
 - Switched CI test execution to `cargo-nextest` and added benchmark compilation coverage for the new Criterion harness.

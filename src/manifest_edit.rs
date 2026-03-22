@@ -18,14 +18,14 @@ pub fn suggest_manifest_changes(
     registry: &dyn RegistryLookup,
     allow_major: bool,
 ) -> Result<Vec<ManifestSuggestion>> {
-    let candidate_problem_names = resolution
+    let candidate_problem_identities = resolution
         .candidate
         .incompatible_packages
         .iter()
         .chain(resolution.candidate.unknown_packages.iter())
-        .map(|issue| issue.package.name.clone())
+        .map(|issue| package_identity(&issue.package.name, issue.package.source.as_deref()))
         .collect::<BTreeSet<_>>();
-    if candidate_problem_names.is_empty() {
+    if candidate_problem_identities.is_empty() {
         return Ok(Vec::new());
     }
 
@@ -38,7 +38,10 @@ pub fn suggest_manifest_changes(
         let constraints =
             direct_dependency_constraints(workspace, &member.package_id, &member.manifest_path)?;
         for constraint in constraints {
-            if !candidate_problem_names.contains(&constraint.package_name) {
+            if !candidate_problem_identities.contains(&package_identity(
+                &constraint.package_name,
+                constraint.source.as_deref(),
+            )) {
                 continue;
             }
             if !constraint
@@ -60,7 +63,13 @@ pub fn suggest_manifest_changes(
                     .candidate
                     .incompatible_packages
                     .iter()
-                    .all(|issue| issue.package.name != constraint.package_name)
+                    .all(|issue| {
+                        package_identity(&issue.package.name, issue.package.source.as_deref())
+                            != package_identity(
+                                &constraint.package_name,
+                                constraint.source.as_deref(),
+                            )
+                    })
             {
                 continue;
             }
@@ -101,6 +110,7 @@ pub fn apply_manifest_suggestions(suggestions: &[ManifestSuggestion]) -> Result<
             acc
         },
     );
+    let mut staged_writes = Vec::new();
     for (manifest_path, manifest_suggestions) in by_manifest {
         let contents = fs::read_to_string(&manifest_path)?;
         let mut document = contents.parse::<DocumentMut>()?;
@@ -114,7 +124,10 @@ pub fn apply_manifest_suggestions(suggestions: &[ManifestSuggestion]) -> Result<
                 );
             }
         }
-        fs::write(&manifest_path, document.to_string())?;
+        staged_writes.push((manifest_path, document.to_string()));
+    }
+    for (manifest_path, contents) in staged_writes {
+        atomic_write(&manifest_path, contents.as_bytes())?;
     }
     Ok(())
 }
@@ -161,6 +174,24 @@ fn dependency_section_label(kind: DependencyKind) -> String {
         _ => "dependencies",
     }
     .to_string()
+}
+
+fn package_identity(name: &str, source: Option<&str>) -> (String, Option<String>) {
+    (name.to_string(), source.map(ToOwned::to_owned))
+}
+
+fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow!("path `{}` has no parent", path.display()))?;
+    fs::create_dir_all(parent)?;
+    let mut temp = tempfile::NamedTempFile::new_in(parent)?;
+    use std::io::Write;
+    temp.write_all(contents)?;
+    temp.flush()?;
+    temp.persist(path)
+        .map_err(|error| anyhow!("failed to persist `{}`: {}", path.display(), error.error))?;
+    Ok(())
 }
 
 fn update_dependency_requirement(
@@ -228,4 +259,96 @@ fn update_dep_item(item: &mut Item, key: &str, suggested_requirement: &str) -> R
         return Ok(true);
     }
     Ok(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_manifest_suggestions;
+    use crate::model::ManifestSuggestion;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn apply_manifest_suggestions_updates_multiple_manifests() {
+        let temp = tempdir().unwrap();
+        let first = temp.path().join("first").join("Cargo.toml");
+        let second = temp.path().join("second").join("Cargo.toml");
+        fs::create_dir_all(first.parent().unwrap()).unwrap();
+        fs::create_dir_all(second.parent().unwrap()).unwrap();
+        fs::write(
+            &first,
+            "[package]\nname = \"first\"\nversion = \"0.1.0\"\n\n[dependencies]\nserde = \"1\"\n",
+        )
+        .unwrap();
+        fs::write(
+            &second,
+            "[package]\nname = \"second\"\nversion = \"0.1.0\"\n\n[dependencies]\nregex = { version = \"1\" }\n",
+        )
+        .unwrap();
+
+        let suggestions = vec![
+            suggestion(&first, "first", "serde", "0.9.0"),
+            suggestion(&second, "second", "regex", "1.10.0"),
+        ];
+
+        apply_manifest_suggestions(&suggestions).unwrap();
+
+        let first_contents = fs::read_to_string(&first).unwrap();
+        let second_contents = fs::read_to_string(&second).unwrap();
+        assert!(first_contents.contains("serde = \"0.9.0\""));
+        assert!(second_contents.contains("version = \"1.10.0\""));
+    }
+
+    #[test]
+    fn apply_manifest_suggestions_avoids_partial_writes_on_failure() {
+        let temp = tempdir().unwrap();
+        let first = temp.path().join("first").join("Cargo.toml");
+        let second = temp.path().join("second").join("Cargo.toml");
+        fs::create_dir_all(first.parent().unwrap()).unwrap();
+        fs::create_dir_all(second.parent().unwrap()).unwrap();
+        fs::write(
+            &first,
+            "[package]\nname = \"first\"\nversion = \"0.1.0\"\n\n[dependencies]\nserde = \"1\"\n",
+        )
+        .unwrap();
+        fs::write(
+            &second,
+            "[package]\nname = \"second\"\nversion = \"0.1.0\"\n\n[dependencies]\nregex = \"1\"\n",
+        )
+        .unwrap();
+        let first_before = fs::read_to_string(&first).unwrap();
+        let second_before = fs::read_to_string(&second).unwrap();
+
+        let suggestions = vec![
+            suggestion(&first, "first", "serde", "0.9.0"),
+            suggestion(&second, "second", "missing", "1.10.0"),
+        ];
+
+        let error = apply_manifest_suggestions(&suggestions).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("failed to locate dependency `missing`"));
+        assert_eq!(fs::read_to_string(&first).unwrap(), first_before);
+        assert_eq!(fs::read_to_string(&second).unwrap(), second_before);
+    }
+
+    fn suggestion(
+        manifest_path: &std::path::Path,
+        package_name: &str,
+        dependency_key: &str,
+        suggested_requirement: &str,
+    ) -> ManifestSuggestion {
+        ManifestSuggestion {
+            package_name: package_name.to_string(),
+            dependency_key: dependency_key.to_string(),
+            dependency_name: dependency_key.to_string(),
+            manifest_path: manifest_path.to_path_buf(),
+            current_requirement: "1".to_string(),
+            suggested_requirement: suggested_requirement.to_string(),
+            reason: "test suggestion".to_string(),
+            target_rust_version: "1.70".to_string(),
+            section: "dependencies".to_string(),
+        }
+    }
 }

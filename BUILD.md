@@ -1,6 +1,6 @@
 # cargo-compatible Build Plan
 
-Last updated: 2026-03-21
+Last updated: 2026-03-22
 Status: active correctness hardening
 Scope: Cargo subcommand for auditing, resolving, and explaining dependency-graph compatibility against a chosen Rust version or MSRV
 
@@ -78,15 +78,18 @@ Any agent making substantial changes to code, docs, workflow, tests, or command 
 
 The tool currently supports:
 
-- workspace and package scoping via `--workspace` and `--package`
+- workspace and package scoping via `--workspace` and `--package`, with exact workspace-member matching by package name, package ID, or manifest path
 - target Rust version selection from CLI, selected package metadata, or mixed-workspace analysis
 - incompatible vs unknown dependency classification
 - dependency-path reporting from selected workspace members
 - temp-workspace candidate lockfile resolution
 - atomic candidate lockfile application
 - conservative manifest suggestions for crates.io direct dependencies using locally cached sparse-index metadata
-- human, JSON, and Markdown output modes
+- staged `--write-manifests` application with per-file atomic persistence after validation
+- human, JSON, and Markdown output modes, including `resolve --write-report` following the selected `--format`
+- conservative resolve diff reporting that omits ambiguous multi-version same-identity before/after pairs instead of collapsing them incorrectly
 - opt-in tracing via `RUST_LOG`
+- `explain` queries limited to packages reachable from the selected dependency graph
 - property tests for candidate-selection and resolution-diff invariants
 - CI and local checks using `fmt`, `clippy`, `test`, `nextest`, `cargo-deny`, and benchmark compilation
 
@@ -94,16 +97,13 @@ The tool currently supports:
 
 The codebase is not in a greenfield planning phase. The main remaining work is correctness hardening and confidence-building around:
 
-- package selection precision
-- explain scoping to the selected graph
-- file output semantics for `--write-report`
-- broader coverage for mutating and file-writing flows
-- source-aware handling of duplicate crate names or multiple sources/versions
+- broader end-to-end coverage for the remaining mutating and file-writing flows, especially deterministic manifest-suggestion scenarios
+- deeper source-aware handling of duplicate crate names or multiple sources/versions in human-facing resolve/explain output
 - more realistic performance evidence beyond the current synthetic benchmark
 
 ### Currently verified commands
 
-These commands are documented in this repository as actually run during the March 20-21, 2026 review and follow-up passes:
+These commands are documented in this repository as actually run during the March 20-22, 2026 review and follow-up passes:
 
 - `cargo fmt --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
@@ -119,6 +119,12 @@ These commands are documented in this repository as actually run during the Marc
 - `cargo run -- explain definitely-not-a-package --manifest-path tests/fixtures/path-too-new/Cargo.toml`
 - `cargo run -- resolve --manifest-path tests/fixtures/virtual-workspace/Cargo.toml --workspace --format markdown`
 - `cargo run -- explain too_new --manifest-path tests/fixtures/path-too-new/Cargo.toml --format markdown`
+- `cargo run -- scan --manifest-path tests/fixtures/mixed-workspace/Cargo.toml --package tests/fixtures/mixed-workspace/members/high/Cargo.toml --format json`
+- `cargo run -- scan --manifest-path tests/fixtures/mixed-workspace/Cargo.toml --package members` (expected failure)
+- `cargo run -- explain low --manifest-path tests/fixtures/mixed-workspace/Cargo.toml --package high` (expected failure)
+- `tmpdir=$(mktemp -d) && cargo run -- resolve --manifest-path tests/fixtures/virtual-workspace/Cargo.toml --workspace --format markdown --write-report "$tmpdir/report.md"`
+- `cargo test apply_manifest_suggestions_`
+- `cargo test apply_lock_`
 
 ## Source Of Truth By Concern
 
@@ -251,7 +257,7 @@ If work changes `apply-lock`, `--write-candidate`, `--write-report`, or `--write
 - Phase 2 - safe resolution and manifest-suggestion workflow. Status: done.
 - Phase 3 - reporting, fixtures, CI, and benchmark baseline. Status: done.
 - Phase 4 - correctness hardening for package selection, explain scope, and report semantics. Status: in progress.
-- Phase 5 - write-path and mutating-flow coverage. Status: not started.
+- Phase 5 - write-path and mutating-flow coverage. Status: in progress.
 - Phase 6 - performance realism and benchmark expansion. Status: not started.
 - Phase 7 - release polish and operator trust cleanup. Status: not started.
 
@@ -327,28 +333,30 @@ Exit criteria:
 
 Status: in progress
 
-- [ ] Replace loose manifest-path substring matching with exact package-name, package-id, or normalized manifest-path matching.
-- [ ] Make `explain` require reachability from the selected dependency graph instead of merely existing somewhere in metadata.
-- [ ] Decide whether `--write-report` should honor `--format` or remain explicitly JSON-only.
-- [ ] Implement the chosen `--write-report` behavior and pin it down with tests.
-- [ ] Add focused tests for short package names, ambiguous path fragments, and out-of-scope `explain` queries.
-- [ ] Review resolve/explain summaries that currently collapse package identity by crate name only.
+- [x] Replace loose manifest-path substring matching with exact package-name, package-id, or normalized manifest-path matching.
+- [x] Make `explain` require reachability from the selected dependency graph instead of merely existing somewhere in metadata.
+- [x] Decide whether `--write-report` should honor `--format` or remain explicitly JSON-only.
+- [x] Implement the chosen `--write-report` behavior and pin it down with tests.
+- [x] Add focused tests for short package names, ambiguous path fragments, and out-of-scope `explain` queries.
+- [x] Stop collapsing ambiguous multi-version same-identity resolve diffs into misleading single before/after pairs.
+- [x] Make manifest-suggestion blocker matching source-aware so same-name crates from other sources do not trigger bogus rewrite suggestions.
+- [ ] Finish the remaining package-identity cleanup in human-facing resolve/explain output where same-name crates can still be hard to distinguish without package IDs.
 
 Exit criteria:
 
-- [ ] Package selection can no longer silently widen the analysis scope.
-- [ ] `explain` success means the queried package is actually in the selected graph.
-- [ ] File-report behavior is explicit, tested, and unsurprising.
+- [x] Package selection can no longer silently widen the analysis scope.
+- [x] `explain` success means the queried package is actually in the selected graph.
+- [x] File-report behavior is explicit, tested, and unsurprising.
 
 ### Phase 5 - write-path and mutating-flow coverage
 
-Status: not started
+Status: in progress
 
-- [ ] Add temp-dir integration coverage for `apply-lock`.
-- [ ] Add direct coverage for `--write-candidate`.
-- [ ] Add direct coverage for `--write-report`.
-- [ ] Add direct coverage for `--write-manifests`.
-- [ ] Verify failure behavior for missing candidate lockfiles and partial-write scenarios where practical.
+- [x] Add temp-dir integration coverage for `apply-lock`.
+- [x] Add direct coverage for `--write-candidate`.
+- [x] Add direct coverage for `--write-report`.
+- [x] Add direct file-write coverage for `--write-manifests`.
+- [x] Verify failure behavior for missing candidate lockfiles and partial-write scenarios where practical.
 - [ ] Add fixture scenarios that exercise true lockfile-only improvements and direct manifest blocker cases.
 
 Exit criteria:
@@ -384,30 +392,28 @@ Exit criteria:
 
 ## Open Decisions And Unresolved Scope
 
-- Should `--write-report` follow `--format`, or should it stay JSON-only with clearer naming/documentation?
-- What exact query forms should count as valid package selection for `--package` and `explain`: exact package name, package ID, normalized manifest path, or a deliberately limited subset?
+- How far should `explain` query matching go beyond the current exact package ID / package name / `name@version` forms if future fixtures expose more ambiguity?
 - How source-aware should resolve/explain reporting become when the same crate name appears from multiple sources or in multiple resolved versions?
 - Should mixed-workspace resolver guidance remain explanatory only for v0.1, or is there a future explicit edit mode worth planning for later?
 
 ## Risk Register
 
-- Loose package-selection matching can silently widen scope and make reports look correct while answering the wrong question.
-- `explain` currently has a correctness/UX risk when a package exists somewhere in metadata but not in the selected graph.
-- `--write-report` currently creates automation risk if stdout and file outputs follow different format semantics without being explicit.
-- Some resolve/explain summaries still reason at crate-name granularity where source-aware identity may matter.
-- Write-path coverage is still thinner than read-only scan/resolve coverage.
+- Some human-facing resolve/explain summaries still do not fully disambiguate same-name crates across all multi-source or same-version query/report cases; package IDs remain the escape hatch.
+- End-to-end `--write-manifests` CLI coverage is still weaker than the direct file-write coverage because a deterministic local registry fixture has not landed yet.
 - The temp-copy resolution model is intentionally safe, but it may become a performance pain point on larger real-world workspaces if not measured carefully.
 - Manifest suggestion quality depends on sparse-index cache availability and intentionally does not reimplement full Cargo feature resolution.
 - The current benchmark is useful but synthetic; it does not yet prove behavior on registry-heavy or feature-heavy repositories.
 
 ## Immediate Next Moves
 
-1. Tighten package selection so short names and path fragments cannot silently broaden the selected scope.
-2. Make `explain` fail clearly when the query is outside the selected graph, then lock that behavior down with integration tests.
-3. Resolve the `--write-report` format question and add direct coverage for write-path behavior instead of leaving it as an implementation accident.
+1. Finish the remaining human-facing package-identity cleanup so same-name crates are easier to distinguish in resolve/explain output without having to fall back to package IDs as often.
+2. Add a deterministic local-registry fixture so `suggest-manifest --write-manifests` can be covered end to end, not only at the direct file-write layer.
+3. Add a fixture that demonstrates a true lockfile-only improvement so the write-path/reporting flow is exercised against a less trivial resolution change.
 
 ## Progress Log
 
+- 2026-03-22: Added direct `apply-lock` coverage, direct manifest-write coverage, and failure-path coverage for missing candidate lockfiles plus partial manifest-apply scenarios; also hardened package identity handling by making manifest-suggestion blocker matching source-aware and by omitting ambiguous multi-version same-identity resolve diffs instead of collapsing them incorrectly. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, `cargo nextest run`, `~/.cargo/bin/cargo-deny check`, `cargo bench --bench large_workspace_resolver --no-run`, `cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.toml`, `cargo run -- resolve --manifest-path tests/fixtures/virtual-workspace/Cargo.toml --workspace --format markdown`. Next: add a deterministic local-registry fixture for end-to-end `--write-manifests` coverage and keep tightening human-facing package identity disambiguation.
+- 2026-03-22: Tightened `--package` to exact workspace-member name/package-ID/manifest-path matching, scoped `explain` to the selected dependency graph, made `resolve --write-report` follow `--format`, improved low-risk package identity labeling in resolve/explain, and added direct integration coverage for `--write-report`/`--write-candidate`. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, `cargo nextest run`, `~/.cargo/bin/cargo-deny check`, `cargo bench --bench large_workspace_resolver --no-run`, `cargo run -- scan --manifest-path tests/fixtures/mixed-workspace/Cargo.toml --package tests/fixtures/mixed-workspace/members/high/Cargo.toml --format json`, `cargo run -- scan --manifest-path tests/fixtures/mixed-workspace/Cargo.toml --package members` (expected failure), `cargo run -- explain low --manifest-path tests/fixtures/mixed-workspace/Cargo.toml --package high` (expected failure), `tmpdir=$(mktemp -d) && cargo run -- resolve --manifest-path tests/fixtures/virtual-workspace/Cargo.toml --workspace --format markdown --write-report "$tmpdir/report.md"`. Next: finish the remaining package-identity cleanup and cover the higher-risk mutating paths.
 - 2026-03-20: Audited the repository, captured the implemented command surface, source files, fixture coverage, current limitations, and verified local workflow in the original `BUILD.md`. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, `cargo nextest run`, `~/.cargo/bin/cargo-deny check`, `cargo bench --bench large_workspace_resolver --no-run`, `cargo run -- --help`, `cargo run -- scan --manifest-path tests/fixtures/path-too-new/Cargo.toml`, `cargo run -- explain too_new --manifest-path tests/fixtures/path-too-new/Cargo.toml`, `cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.toml`. Next: perform a deeper code review and identify correctness gaps.
 - 2026-03-20: Completed a deeper review of the core modules, CLI/tests/fixtures, CI workflow, and repo docs; identified issues around overly permissive `--package`, Markdown fallbacks in `resolve`/`explain`, unnecessary work and silent success in `explain`, crate-name-only reporting collapse, and thin edge-case coverage on mutating flows. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, `cargo nextest run`, plus spot checks of `--package`, `explain`, and `--format markdown` behavior. Next: land the first wave of fixes and expand CLI integration coverage.
 - 2026-03-20: Implemented the first review follow-up pass by restricting `--package` to workspace members, tightening invalid `explain` queries, replacing the Markdown fallbacks for `resolve` and `explain`, and adding integration coverage for those paths. Verified with: `cargo fmt --check`, `cargo test`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo run -- scan --manifest-path tests/fixtures/missing-rust-version/Cargo.toml --package helper`, `cargo run -- explain definitely-not-a-package --manifest-path tests/fixtures/path-too-new/Cargo.toml`, `cargo run -- resolve --manifest-path tests/fixtures/virtual-workspace/Cargo.toml --workspace --format markdown`, `cargo run -- explain too_new --manifest-path tests/fixtures/path-too-new/Cargo.toml --format markdown`. Next: revisit remaining source-aware reporting and write-path coverage gaps.
@@ -416,6 +422,11 @@ Exit criteria:
 
 ## Decision Log
 
+- 2026-03-22: Detailed resolve version changes are omitted when multiple resolved versions share the same package name/source identity - collapsing them into one before/after pair was misleading - notes should be conservative rather than fabricate precision.
+- 2026-03-22: `suggest-manifest --write-manifests` stages all targeted edits before atomically persisting each manifest - later lookup failures should not leave earlier manifests partially applied - the mutating path must be safer than a naive sequential write loop.
+- 2026-03-22: `--package` now matches workspace members only by exact package name, package ID, or normalized manifest path - substring path matching was too error-prone and could silently widen scope - selection errors should stay explicit instead of being permissive.
+- 2026-03-22: `explain` queries are scoped to the selected dependency graph - a package merely existing somewhere in `cargo metadata` is not enough to justify a successful explanation - success should imply relevance to the chosen graph.
+- 2026-03-22: `resolve --write-report` follows the selected `--format` - file output should match the rendered stdout contract unless the CLI says otherwise - automation can still request JSON explicitly with `--format json`.
 - 2026-03-20: Missing dependency `rust-version` metadata is treated as `unknown`, not compatible - safer than optimistic guessing and matches the current analysis model - reports and follow-up logic must preserve that distinction.
 - 2026-03-20: `resolve` runs in a temporary workspace copy rather than mutating the real checkout - favors safety and debuggability over raw speed - future performance work must justify any change to this model explicitly.
 - 2026-03-20: `apply-lock` requires an explicit candidate lockfile path and applies it atomically - keeps the mutating step narrow and intentional - users should never get an implicit lockfile rewrite from a read-only command.

@@ -48,7 +48,11 @@ This file is concise repo memory for future agents and developers. `BUILD.md` is
 - `resolve` uses a temporary workspace copy instead of mutating the real checkout.
 - Tracing is opt-in through `RUST_LOG`; normal command output remains unchanged unless tracing is enabled.
 - Manifest suggestions intentionally prefer conservative no-op behavior when registry cache data is missing or the dependency is non-registry.
+- `suggest-manifest --write-manifests` stages validated manifest edits before atomically persisting each file so later failures do not leave earlier manifests partially applied.
 - Output ordering is deterministic to keep human reports and snapshots stable.
+- `resolve` version-change details stay conservative when the same package name/source appears at multiple resolved versions; ambiguous identities are noted instead of being collapsed into a misleading single change line.
+- `--package` selection is exact by workspace member package name, package ID, or manifest path; avoid relying on substring path matches.
+- `explain` only succeeds for packages reachable from the selected dependency graph; out-of-scope queries should fail clearly.
 - Path and git dependencies are analyzed and explained, but they do not receive bogus crates.io downgrade suggestions.
 - `cargo-deny` currently passes with duplicate-version warnings from transitive dependencies; CI treats them as warnings, not failures.
 

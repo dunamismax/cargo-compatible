@@ -14,6 +14,7 @@ It focuses on five workflows:
 
 - Reads the current workspace graph through `cargo metadata --format-version 1`.
 - Selects the target Rust version from `--rust-version`, selected package metadata, or mixed-workspace analysis.
+- Matches `--package` selections by exact workspace member package name, package ID, or manifest path.
 - Marks resolved packages as:
   - incompatible when `package.rust-version` is higher than the selected target
   - unknown when `package.rust-version` is missing
@@ -28,6 +29,7 @@ It focuses on five workflows:
 - `resolve` works in a temp copy of the workspace by default.
 - `apply-lock` requires an explicit candidate lockfile path.
 - `suggest-manifest` is dry-run by default.
+- `suggest-manifest --write-manifests` stages validated manifest edits before persisting them, which avoids partially applying earlier manifest updates when a later target fails.
 - Missing dependency `rust-version` metadata is treated as unknown, not compatible.
 
 ## Crates.io
@@ -56,7 +58,7 @@ cargo compatible apply-lock --candidate-lockfile .cargo-compatible/candidate/Car
 
 ### `cargo compatible scan`
 
-Use this first to see the current workspace state.
+Use this first to see the current workspace state. `--package` accepts an exact workspace member package name, package ID, or manifest path; it does not do substring matching.
 
 ```bash
 cargo compatible scan --workspace
@@ -66,7 +68,7 @@ cargo compatible scan --rust-version 1.70
 
 ### `cargo compatible resolve`
 
-Creates a temp workspace copy and runs stable Cargo resolution there.
+Creates a temp workspace copy and runs stable Cargo resolution there. `--write-report` writes the same rendered output selected by `--format`.
 
 ```bash
 cargo compatible resolve --workspace
@@ -94,7 +96,7 @@ cargo compatible suggest-manifest --package app --allow-major
 
 ### `cargo compatible explain`
 
-Explains why a package is present and why it is incompatible or unknown.
+Explains why a package is present and why it is incompatible or unknown. Queries must resolve inside the selected dependency graph; use a package ID or `name@version` when a short name is ambiguous.
 
 ```bash
 cargo compatible explain serde
@@ -143,6 +145,7 @@ The JSON reports are intentionally structured around stable sections instead of 
 - Manifest suggestions depend on crates.io sparse index entries already present in the local Cargo cache; uncached crates are reported conservatively with no rewrite suggestion.
 - Feature validation uses registry feature names and optional dependency feature inference; it does not model every Cargo feature edge case.
 - `resolve` currently re-runs Cargo in a full temp copy of the workspace, which favors correctness and safety over speed.
+- Detailed `resolve` version-change reporting stays conservative when multiple resolved versions share the same package name and source; ambiguous cases are noted instead of being collapsed into a misleading single before/after pair.
 - Resolver guidance for virtual workspaces is surfaced as a recommendation; this version does not auto-edit `workspace.resolver`.
 - Path and git dependencies are analyzed and explained, but they do not receive bogus registry downgrade suggestions.
 

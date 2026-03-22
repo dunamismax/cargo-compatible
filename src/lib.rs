@@ -42,18 +42,16 @@ fn dispatch(cli: Cli) -> Result<()> {
             let workspace = load_workspace(command.selection.manifest_path.as_deref())?;
             let selection = select_packages(&workspace, &command.selection)?;
             let report = build_candidate_resolution(&workspace, &selection, &command)?;
+            let rendered = render_resolve_report(&report, command.format)?;
             if let Some(path) = command.write_report.as_ref() {
-                fs::write(path, serde_json::to_vec_pretty(&report)?)?;
+                persist_text(path, rendered.as_bytes())?;
             }
             if let Some(path) = command.write_candidate.as_ref() {
                 if let Some(candidate) = report.candidate_lockfile.as_ref() {
-                    persist_candidate(path, candidate)?;
+                    persist_text(path, candidate.as_bytes())?;
                 }
             }
-            print_output(
-                command.format,
-                render_resolve_report(&report, command.format)?,
-            )?;
+            print_output(command.format, rendered)?;
         }
         Commands::ApplyLock(command) => {
             let workspace = load_workspace(command.manifest_path.as_deref())?;
@@ -115,7 +113,7 @@ fn dispatch(cli: Cli) -> Result<()> {
     Ok(())
 }
 
-fn persist_candidate(path: &PathBuf, contents: &str) -> Result<()> {
+fn persist_text(path: &PathBuf, contents: &[u8]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
