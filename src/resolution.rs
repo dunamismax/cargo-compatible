@@ -1,5 +1,9 @@
 use crate::cli::ResolveCommand;
 use crate::compat::analyze_current_workspace;
+use crate::identity::{
+    colliding_base_labels, package_identity_label, stable_package_identity, stable_package_origin,
+    unique_package_label,
+};
 use crate::metadata::load_workspace;
 use crate::model::{CandidateVersionChange, ResolveReport, Selection, WorkspaceData};
 use crate::temp_workspace::TempWorkspace;
@@ -45,23 +49,56 @@ pub fn build_candidate_resolution(
     };
     let (version_changes, ambiguous_version_changes) =
         compute_version_changes(workspace, &candidate_workspace);
+    let issue_package_collisions = colliding_base_labels(
+        current
+            .incompatible_packages
+            .iter()
+            .chain(current.unknown_packages.iter())
+            .map(|issue| (&issue.package, workspace.workspace_root.as_path()))
+            .chain(
+                candidate
+                    .incompatible_packages
+                    .iter()
+                    .chain(candidate.unknown_packages.iter())
+                    .map(|issue| (&issue.package, candidate_workspace.workspace_root.as_path())),
+            ),
+    );
     let current_problem_ids = current
         .incompatible_packages
         .iter()
         .chain(current.unknown_packages.iter())
-        .map(|issue| package_label(&issue.package))
-        .collect::<BTreeSet<_>>();
+        .map(|issue| {
+            (
+                stable_package_identity(&issue.package, &workspace.workspace_root),
+                unique_package_label(
+                    &issue.package,
+                    &workspace.workspace_root,
+                    &issue_package_collisions,
+                ),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
     let candidate_problem_ids = candidate
         .incompatible_packages
         .iter()
         .chain(candidate.unknown_packages.iter())
-        .map(|issue| package_label(&issue.package))
-        .collect::<BTreeSet<_>>();
+        .map(|issue| {
+            (
+                stable_package_identity(&issue.package, &candidate_workspace.workspace_root),
+                unique_package_label(
+                    &issue.package,
+                    &candidate_workspace.workspace_root,
+                    &issue_package_collisions,
+                ),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
     let improved_packages = current_problem_ids
-        .difference(&candidate_problem_ids)
-        .cloned()
+        .keys()
+        .filter(|key| !candidate_problem_ids.contains_key(*key))
+        .filter_map(|key| current_problem_ids.get(key).cloned())
         .collect::<Vec<_>>();
-    let remaining_blockers = candidate_problem_ids.into_iter().collect::<Vec<_>>();
+    let remaining_blockers = candidate_problem_ids.into_values().collect::<Vec<_>>();
     let mut notes = workspace.recommendations.clone();
     if version_changes.is_empty() && ambiguous_version_changes.is_empty() {
         notes.push("candidate lockfile did not change the resolved dependency graph".to_string());
@@ -162,67 +199,126 @@ fn compute_version_changes(
     current: &WorkspaceData,
     candidate: &WorkspaceData,
 ) -> (Vec<CandidateVersionChange>, Vec<String>) {
-    compute_version_changes_from_packages(&current.packages_by_id, &candidate.packages_by_id)
+    compute_version_changes_from_packages(
+        &current.packages_by_id,
+        &current.workspace_root,
+        &candidate.packages_by_id,
+        &candidate.workspace_root,
+    )
 }
 
 fn compute_version_changes_from_packages(
     current_packages: &BTreeMap<String, crate::model::ResolvedPackage>,
+    current_workspace_root: &Path,
     candidate_packages: &BTreeMap<String, crate::model::ResolvedPackage>,
+    candidate_workspace_root: &Path,
 ) -> (Vec<CandidateVersionChange>, Vec<String>) {
-    let current_versions = grouped_versions_by_identity(current_packages);
-    let candidate_versions = grouped_versions_by_identity(candidate_packages);
+    let current_versions = grouped_versions_by_identity(current_packages, current_workspace_root);
+    let candidate_versions =
+        grouped_versions_by_identity(candidate_packages, candidate_workspace_root);
 
     let keys = current_versions
         .keys()
         .chain(candidate_versions.keys())
         .cloned()
         .collect::<BTreeSet<_>>();
-    let mut changes = Vec::new();
-    let mut ambiguous = Vec::new();
-    for (name, source) in keys {
+    let mut pending_changes = Vec::new();
+    let mut pending_ambiguous = Vec::new();
+    for key in keys {
         let before_versions = current_versions
-            .get(&(name.clone(), source.clone()))
-            .cloned()
+            .get(&key)
+            .map(|versions| versions.versions.clone())
             .unwrap_or_default();
         let after_versions = candidate_versions
-            .get(&(name.clone(), source.clone()))
-            .cloned()
+            .get(&key)
+            .map(|versions| versions.versions.clone())
             .unwrap_or_default();
         if before_versions == after_versions {
             continue;
         }
+        let representative = candidate_versions
+            .get(&key)
+            .or_else(|| current_versions.get(&key))
+            .expect("identity key should exist in current or candidate versions");
         if before_versions.len() <= 1 && after_versions.len() <= 1 {
-            changes.push(CandidateVersionChange {
-                package_name: name,
-                source,
-                before: before_versions.into_iter().next(),
-                after: after_versions.into_iter().next(),
-            });
+            pending_changes.push((
+                representative.package.clone(),
+                representative.workspace_root.clone(),
+                before_versions.into_iter().next(),
+                after_versions.into_iter().next(),
+            ));
         } else {
-            ambiguous.push(package_identity_label(&name, source.as_deref()));
+            pending_ambiguous.push((
+                representative.package.clone(),
+                representative.workspace_root.clone(),
+            ));
         }
     }
+
+    let collisions = colliding_base_labels(
+        pending_changes
+            .iter()
+            .map(|(package, workspace_root, _, _)| (package, workspace_root.as_path()))
+            .chain(
+                pending_ambiguous
+                    .iter()
+                    .map(|(package, workspace_root)| (package, workspace_root.as_path())),
+            ),
+    );
+
+    let changes = pending_changes
+        .into_iter()
+        .map(
+            |(package, workspace_root, before, after)| CandidateVersionChange {
+                package_name: package.name.clone(),
+                source: package.source.clone(),
+                package_label: Some(unique_package_label(&package, &workspace_root, &collisions)),
+                before,
+                after,
+            },
+        )
+        .collect();
+    let ambiguous = pending_ambiguous
+        .into_iter()
+        .map(|(package, workspace_root)| package_identity_label(&package, &workspace_root))
+        .collect();
     (changes, ambiguous)
 }
 
 fn grouped_versions_by_identity(
     packages: &BTreeMap<String, crate::model::ResolvedPackage>,
-) -> BTreeMap<(String, Option<String>), BTreeSet<String>> {
+    workspace_root: &Path,
+) -> BTreeMap<VersionChangeIdentity, IdentityVersions> {
     let mut versions = BTreeMap::new();
     for package in packages.values() {
         versions
-            .entry((package.name.clone(), package.source.clone()))
-            .or_insert_with(BTreeSet::new)
-            .insert(package.version.to_string());
+            .entry(VersionChangeIdentity {
+                package_name: package.name.clone(),
+                origin: stable_package_origin(package, workspace_root),
+            })
+            .and_modify(|entry: &mut IdentityVersions| {
+                entry.versions.insert(package.version.to_string());
+            })
+            .or_insert_with(|| IdentityVersions {
+                package: package.clone(),
+                workspace_root: workspace_root.to_path_buf(),
+                versions: BTreeSet::from([package.version.to_string()]),
+            });
     }
     versions
 }
 
-fn package_identity_label(name: &str, source: Option<&str>) -> String {
-    match source {
-        Some(source) => format!("{name} ({source})"),
-        None => name.to_string(),
-    }
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct VersionChangeIdentity {
+    package_name: String,
+    origin: String,
+}
+
+#[derive(Debug, Clone)]
+struct IdentityVersions {
+    package: crate::model::ResolvedPackage,
+    workspace_root: PathBuf,
+    versions: BTreeSet<String>,
 }
 
 fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
@@ -251,22 +347,15 @@ fn diff_summary(before: &str, after: &str) -> String {
     format!("package entries: {before_count} -> {after_count}")
 }
 
-fn package_label(package: &crate::model::ResolvedPackage) -> String {
-    match package.source.as_deref() {
-        Some(source) => format!("{}@{} ({source})", package.name, package.version),
-        None => format!("{}@{}", package.name, package.version),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{compute_version_changes_from_packages, package_identity_label};
+    use super::compute_version_changes_from_packages;
     use crate::model::{PackageSourceKind, ResolvedPackage};
     use proptest::collection::btree_map;
     use proptest::prelude::*;
     use semver::Version;
     use std::collections::BTreeMap;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     #[derive(Debug, Clone)]
     struct PackageSpec {
@@ -297,6 +386,7 @@ mod tests {
                     &format!("crate_{id}"),
                     spec.version,
                     spec.source,
+                    PathBuf::from(format!("deps/crate_{id}/Cargo.toml")),
                 )
             })
             .collect()
@@ -307,6 +397,7 @@ mod tests {
         name: &str,
         version: (u64, u64, u64),
         source: Option<&str>,
+        manifest_path: PathBuf,
     ) -> (String, ResolvedPackage) {
         (
             id.to_string(),
@@ -321,7 +412,7 @@ mod tests {
                     Some(_) => PackageSourceKind::Unknown,
                     None => PackageSourceKind::Path,
                 },
-                manifest_path: PathBuf::from("Cargo.toml"),
+                manifest_path,
                 rust_version: Some("1.70".to_string()),
                 workspace_member: false,
             },
@@ -336,8 +427,12 @@ mod tests {
         ) {
             let current_packages = package_map(&current);
             let candidate_packages = package_map(&candidate);
-            let (changes, ambiguous) =
-                compute_version_changes_from_packages(&current_packages, &candidate_packages);
+            let (changes, ambiguous) = compute_version_changes_from_packages(
+                &current_packages,
+                Path::new("/workspace"),
+                &candidate_packages,
+                Path::new("/workspace"),
+            );
 
             let mut expected = BTreeMap::new();
             for package in current_packages.values() {
@@ -373,21 +468,38 @@ mod tests {
     fn version_change_diff_omits_ambiguous_same_name_same_source_versions() {
         let registry = Some("registry+https://github.com/rust-lang/crates.io-index");
         let current = BTreeMap::from([
-            resolved_package("pkg-a", "shared", (1, 0, 0), registry),
-            resolved_package("pkg-b", "shared", (2, 0, 0), registry),
+            resolved_package(
+                "pkg-a",
+                "shared",
+                (1, 0, 0),
+                registry,
+                PathBuf::from("deps/shared-a/Cargo.toml"),
+            ),
+            resolved_package(
+                "pkg-b",
+                "shared",
+                (2, 0, 0),
+                registry,
+                PathBuf::from("deps/shared-b/Cargo.toml"),
+            ),
         ]);
-        let candidate = BTreeMap::from([resolved_package("pkg-c", "shared", (1, 0, 0), registry)]);
+        let candidate = BTreeMap::from([resolved_package(
+            "pkg-c",
+            "shared",
+            (1, 0, 0),
+            registry,
+            PathBuf::from("deps/shared-c/Cargo.toml"),
+        )]);
 
-        let (changes, ambiguous) = compute_version_changes_from_packages(&current, &candidate);
+        let (changes, ambiguous) = compute_version_changes_from_packages(
+            &current,
+            Path::new("/workspace"),
+            &candidate,
+            Path::new("/workspace"),
+        );
 
         assert!(changes.is_empty());
-        assert_eq!(
-            ambiguous,
-            vec![package_identity_label(
-                "shared",
-                Some("registry+https://github.com/rust-lang/crates.io-index")
-            )]
-        );
+        assert_eq!(ambiguous, vec!["shared [registry: crates.io]".to_string()]);
     }
 
     #[test]
@@ -398,12 +510,14 @@ mod tests {
                 "shared",
                 (1, 0, 0),
                 Some("registry+https://github.com/rust-lang/crates.io-index"),
+                PathBuf::from("deps/registry/Cargo.toml"),
             ),
             resolved_package(
                 "pkg-b",
                 "shared",
                 (1, 0, 0),
-                Some("git+https://example.invalid/repo"),
+                Some("git+https://example.invalid/repo#1111111111111111"),
+                PathBuf::from("deps/git/Cargo.toml"),
             ),
         ]);
         let candidate = BTreeMap::from([
@@ -412,16 +526,23 @@ mod tests {
                 "shared",
                 (0, 9, 0),
                 Some("registry+https://github.com/rust-lang/crates.io-index"),
+                PathBuf::from("deps/registry/Cargo.toml"),
             ),
             resolved_package(
                 "pkg-b2",
                 "shared",
                 (1, 0, 0),
-                Some("git+https://example.invalid/repo"),
+                Some("git+https://example.invalid/repo#1111111111111111"),
+                PathBuf::from("deps/git/Cargo.toml"),
             ),
         ]);
 
-        let (changes, ambiguous) = compute_version_changes_from_packages(&current, &candidate);
+        let (changes, ambiguous) = compute_version_changes_from_packages(
+            &current,
+            Path::new("/workspace"),
+            &candidate,
+            Path::new("/workspace"),
+        );
 
         assert!(ambiguous.is_empty());
         assert_eq!(changes.len(), 1);
@@ -432,5 +553,61 @@ mod tests {
         );
         assert_eq!(changes[0].before.as_deref(), Some("1.0.0"));
         assert_eq!(changes[0].after.as_deref(), Some("0.9.0"));
+        assert_eq!(
+            changes[0].package_label.as_deref(),
+            Some("shared@0.9.0 [registry: crates.io]")
+        );
+    }
+
+    #[test]
+    fn version_change_diff_keeps_same_name_different_path_packages_separate() {
+        let current = BTreeMap::from([
+            resolved_package(
+                "path+file:///workspace/deps/shared-a#shared@0.1.0",
+                "shared",
+                (1, 0, 0),
+                None,
+                PathBuf::from("/workspace/deps/shared-a/Cargo.toml"),
+            ),
+            resolved_package(
+                "path+file:///workspace/deps/shared-b#shared@0.1.0",
+                "shared",
+                (1, 0, 0),
+                None,
+                PathBuf::from("/workspace/deps/shared-b/Cargo.toml"),
+            ),
+        ]);
+        let candidate = BTreeMap::from([
+            resolved_package(
+                "path+file:///tmp/candidate/deps/shared-a#shared@0.1.0",
+                "shared",
+                (0, 9, 0),
+                None,
+                PathBuf::from("/tmp/candidate/deps/shared-a/Cargo.toml"),
+            ),
+            resolved_package(
+                "path+file:///tmp/candidate/deps/shared-b#shared@0.1.0",
+                "shared",
+                (1, 0, 0),
+                None,
+                PathBuf::from("/tmp/candidate/deps/shared-b/Cargo.toml"),
+            ),
+        ]);
+
+        let (changes, ambiguous) = compute_version_changes_from_packages(
+            &current,
+            Path::new("/workspace"),
+            &candidate,
+            Path::new("/tmp/candidate"),
+        );
+
+        assert!(ambiguous.is_empty());
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].before.as_deref(), Some("1.0.0"));
+        assert_eq!(changes[0].after.as_deref(), Some("0.9.0"));
+        assert_eq!(
+            changes[0].package_label.as_deref(),
+            Some("shared@0.9.0 [path: deps/shared-a]")
+        );
     }
 }

@@ -1,193 +1,32 @@
 # cargo-compatible
 
-`cargo-compatible` is a Cargo subcommand for finding the highest dependency graph that still fits a chosen Rust version or MSRV.
+cargo-compatible is a Cargo subcommand for checking whether a resolved dependency graph still fits a target Rust version or MSRV. It can scan the graph, try a candidate lockfile, explain blockers, and suggest conservative manifest changes when a lockfile-only path is not enough.
 
-It focuses on five workflows:
-
-1. `cargo compatible scan`
-2. `cargo compatible resolve`
-3. `cargo compatible apply-lock`
-4. `cargo compatible suggest-manifest`
-5. `cargo compatible explain <crate-or-pkgid>`
-
-## What It Does
-
-- Reads the current workspace graph through `cargo metadata --format-version 1`.
-- Selects the target Rust version from `--rust-version`, selected package metadata, or mixed-workspace analysis.
-- Matches `--package` selections by exact workspace member package name, package ID, or manifest path.
-- Marks resolved packages as:
-  - incompatible when `package.rust-version` is higher than the selected target
-  - unknown when `package.rust-version` is missing
-- Shows dependency paths from selected workspace members to problematic packages.
-- Builds candidate lockfiles in a temporary workspace without mutating your real checkout.
-- Applies a saved candidate lockfile only on explicit command.
-- Suggests conservative direct dependency requirement changes for crates.io dependencies when lockfile-only resolution is not enough, using Cargo's sparse cache or a crates.io local-registry replacement from `.cargo/config.toml` when available.
-
-## Safety Model
-
-- `scan` never mutates user files.
-- `resolve` works in a temp copy of the workspace by default.
-- `apply-lock` requires an explicit candidate lockfile path.
-- `suggest-manifest` is dry-run by default.
-- `suggest-manifest --write-manifests` stages validated manifest edits before persisting them, which avoids partially applying earlier manifest updates when a later target fails.
-- Missing dependency `rust-version` metadata is treated as unknown, not compatible.
-
-## Crates.io
-
-- <https://crates.io/crates/cargo-compatible>
-
-## Installation
+## Install
 
 ```bash
 cargo install cargo-compatible
 ```
 
-After installation, the subcommand is available as `cargo compatible`.
+## Commands
 
-## Basic Use
+- `cargo compatible scan`
+- `cargo compatible resolve`
+- `cargo compatible apply-lock`
+- `cargo compatible suggest-manifest`
+- `cargo compatible explain <crate-or-pkgid>`
+
+## Quick start
 
 ```bash
 cargo compatible scan --workspace
 cargo compatible resolve --workspace --write-candidate .cargo-compatible/candidate/Cargo.lock
 cargo compatible explain serde
 cargo compatible suggest-manifest --package my-crate
-cargo compatible apply-lock --candidate-lockfile .cargo-compatible/candidate/Cargo.lock
 ```
 
-## Command Notes
+## Notes
 
-### `cargo compatible scan`
-
-Use this first to see the current workspace state. `--package` accepts an exact workspace member package name, package ID, or manifest path; it does not do substring matching.
-
-```bash
-cargo compatible scan --workspace
-cargo compatible scan --package app --format json
-cargo compatible scan --rust-version 1.70
-```
-
-### `cargo compatible resolve`
-
-Creates a temp workspace copy and runs stable Cargo resolution there. `--write-report` writes the same rendered output selected by `--format`.
-
-```bash
-cargo compatible resolve --workspace
-cargo compatible resolve --workspace --write-candidate .cargo-compatible/candidate/Cargo.lock
-cargo compatible resolve --workspace --write-report compatible-report.json --format json
-```
-
-### `cargo compatible apply-lock`
-
-Writes a previously saved candidate lockfile back to the real workspace.
-
-```bash
-cargo compatible apply-lock --candidate-lockfile .cargo-compatible/candidate/Cargo.lock
-```
-
-### `cargo compatible suggest-manifest`
-
-Finds remaining direct dependency constraints after a best-effort lockfile-only pass.
-
-```bash
-cargo compatible suggest-manifest --package app
-cargo compatible suggest-manifest --package app --write-manifests
-cargo compatible suggest-manifest --package app --allow-major
-```
-
-### `cargo compatible explain`
-
-Explains why a package is present and why it is incompatible or unknown. Queries must resolve inside the selected dependency graph; use a package ID or `name@version` when a short name is ambiguous. Human and Markdown output now label resolved workspace/path packages with extra source context to reduce same-name confusion.
-
-```bash
-cargo compatible explain serde
-cargo compatible explain "serde@1.0.218"
-```
-
-## JSON Output Shape
-
-The JSON reports are intentionally structured around stable sections instead of raw command text.
-
-- `scan`
-  - `target`
-  - `workspace`
-  - `package_summaries`
-  - `incompatible_packages`
-  - `unknown_packages`
-  - `notes`
-- `resolve`
-  - `current`
-  - `candidate`
-  - `version_changes`
-  - `improved_packages`
-  - `remaining_blockers`
-  - `candidate_lockfile`
-  - `notes`
-- `suggest-manifest`
-  - `candidate_resolution`
-  - `manifest_suggestions`
-  - `write_manifests`
-- `explain`
-  - `query`
-  - `target`
-  - `package`
-  - `current_status`
-  - `current_reason`
-  - `current_paths`
-  - `current_rust_version`
-  - `candidate_version`
-  - `candidate_status`
-  - `blocker`
-  - `notes`
-
-## Current Limitations
-
-- Manifest suggestions are intentionally conservative and currently focus on normal direct dependencies.
-- Manifest suggestions depend on crates.io metadata being locally available, either through the sparse cache or through a workspace-level crates.io `local-registry` replacement; otherwise uncached crates are reported conservatively with no rewrite suggestion.
-- Feature validation uses registry feature names and optional dependency feature inference; it does not model every Cargo feature edge case.
-- `resolve` currently re-runs Cargo in a full temp copy of the workspace, which favors correctness and safety over speed.
-- Detailed `resolve` version-change reporting stays conservative when multiple resolved versions share the same package name and source; ambiguous cases are noted instead of being collapsed into a misleading single before/after pair.
-- Resolver guidance for virtual workspaces is surfaced as a recommendation; this version does not auto-edit `workspace.resolver`.
-- Path and git dependencies are analyzed and explained, but they do not receive bogus registry downgrade suggestions.
-
-## Development
-
-Install the cargo subcommands used by CI if you do not already have them:
-
-```bash
-cargo install cargo-deny --locked
-cargo install cargo-nextest --locked
-```
-
-The test and verification stack now includes:
-
-- `proptest` invariants for semver candidate selection and resolution-diff behavior
-- `cargo-nextest` for the main integration and property test suite
-- `cargo-deny` for advisory, license, and source-policy checks
-- `criterion` for a synthetic large-workspace resolver benchmark
-
-Run the standard local verification commands with:
-
-```bash
-cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test
-cargo nextest run
-cargo deny check
-cargo bench --bench large_workspace_resolver --no-run
-```
-
-Run the full resolver benchmark locally with:
-
-```bash
-cargo bench --bench large_workspace_resolver
-```
-
-Tracing is opt-in and uses standard `RUST_LOG` filtering:
-
-```bash
-RUST_LOG=cargo_compatible=debug cargo compatible scan --workspace
-```
-
-## License
-
-MIT. See `LICENSE`.
+- missing `rust-version` metadata is reported as unknown, not silently compatible
+- `resolve` works through a temporary workspace copy
+- manifest suggestions stay conservative, especially for path and git dependencies

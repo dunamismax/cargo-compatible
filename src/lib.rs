@@ -1,6 +1,7 @@
 pub mod cli;
 pub mod compat;
 pub mod explain;
+pub mod identity;
 pub mod index;
 pub mod manifest_edit;
 pub mod metadata;

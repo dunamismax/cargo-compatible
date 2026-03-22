@@ -1,6 +1,6 @@
 ---
 source: tests/integration_cli.rs
-assertion_line: 293
+assertion_line: 367
 expression: output
 ---
 Explanation
@@ -10,4 +10,4 @@ Explanation
   blocker: PathOrGitConstraint
 
 Dependency Paths
-  path-too-new: path-too-new@0.1.0 -> too_new@0.1.0
+  path-too-new: path-too-new@0.1.0 [workspace] -> too_new@0.1.0 [path: too_new]

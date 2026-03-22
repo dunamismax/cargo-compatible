@@ -28,6 +28,8 @@ This file is concise repo memory for future agents and developers. `BUILD.md` is
   - Direct dependency inspection, conservative suggestion generation, and minimal TOML edits
 - `src/explain.rs`
   - Per-package explanation assembly and blocker classification
+- `src/identity.rs`
+  - Package identity labeling, stable comparison keys, and collision fallback helpers
 - `src/report.rs`
   - Human, JSON, and Markdown report rendering
 - `benches/large_workspace_resolver.rs`
@@ -50,8 +52,8 @@ This file is concise repo memory for future agents and developers. `BUILD.md` is
 - Manifest suggestions intentionally prefer conservative no-op behavior when registry metadata is missing or the dependency is non-registry; they can read either the crates.io sparse cache or a crates.io `local-registry` replacement from workspace config.
 - `suggest-manifest --write-manifests` stages validated manifest edits before atomically persisting each file so later failures do not leave earlier manifests partially applied.
 - Output ordering is deterministic to keep human reports and snapshots stable.
-- Human and Markdown reports include lightweight workspace/path/registry identity labels where they materially reduce same-name package ambiguity.
-- `resolve` version-change details stay conservative when the same package name/source appears at multiple resolved versions; ambiguous identities are noted instead of being collapsed into a misleading single change line.
+- Human and Markdown reports include lightweight workspace/path/git identity labels in both resolved-package lines and dependency-path chains where they materially reduce same-name package ambiguity; the rare remaining collisions fall back to package IDs.
+- `resolve` version-change details stay conservative when the same stable package identity appears at multiple resolved versions; ambiguous identities are noted instead of being collapsed into a misleading single change line.
 - `--package` selection is exact by workspace member package name, package ID, or manifest path; avoid relying on substring path matches.
 - `explain` only succeeds for packages reachable from the selected dependency graph; out-of-scope queries should fail clearly.
 - Path and git dependencies are analyzed and explained, but they do not receive bogus crates.io downgrade suggestions.
@@ -75,6 +77,7 @@ cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.
 ## Current Gaps
 
 - `resolve` currently relies on stable Cargo commands in a full temp copy of the workspace, which is safe but can be slower on larger repos.
+- A true lockfile-only downgrade/improvement scenario is currently blocked by Cargo invocation strategy: stable `cargo update --workspace` preserves valid existing lockfile selections instead of downgrading them to the latest Rust-compatible version.
 - Manifest suggestion logic is strongest for normal direct crates.io dependencies and currently relies on locally available sparse-index or local-registry metadata.
 - Feature validation is conservative and not a complete reimplementation of Cargo feature resolution semantics.
 - Mixed-workspace reasoning is explanatory rather than prescriptive; this version does not auto-edit `workspace.resolver = "3"`.

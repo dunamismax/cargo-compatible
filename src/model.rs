@@ -105,6 +105,7 @@ pub struct ScanReport {
 pub struct CandidateVersionChange {
     pub package_name: String,
     pub source: Option<String>,
+    pub package_label: Option<String>,
     pub before: Option<String>,
     pub after: Option<String>,
 }

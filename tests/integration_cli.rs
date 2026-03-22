@@ -24,6 +24,11 @@ struct LocalRegistryFixture {
     cargo_home: PathBuf,
 }
 
+struct GitDependencyFixture {
+    _temp: TempDir,
+    workspace_root: PathBuf,
+}
+
 #[derive(Clone, Copy)]
 struct LocalRegistryPackage {
     name: &'static str,
@@ -60,6 +65,93 @@ fn stage_local_registry_fixture(workspace_fixture: &str) -> LocalRegistryFixture
         workspace_root,
         cargo_home,
     }
+}
+
+fn stage_git_dependency_fixture() -> GitDependencyFixture {
+    let temp = tempdir().unwrap();
+    let repo_a = create_git_package_repo(temp.path(), "shared-a", "shared", "0.1.0", "1.70");
+    let repo_b = create_git_package_repo(temp.path(), "shared-b", "shared", "0.1.0", "1.69");
+    let workspace_root = temp.path().join("workspace");
+    fs::create_dir_all(workspace_root.join("src")).unwrap();
+    fs::write(
+        workspace_root.join("Cargo.toml"),
+        format!(
+            "[package]\nname = \"git-identity-chains\"\nversion = \"0.1.0\"\nedition = \"2021\"\nrust-version = \"1.60\"\n\n[dependencies]\nshared_a = {{ package = \"shared\", git = \"file://{}\" }}\nshared_b = {{ package = \"shared\", git = \"file://{}\" }}\n",
+            repo_a.display(),
+            repo_b.display(),
+        ),
+    )
+    .unwrap();
+    fs::write(workspace_root.join("src").join("main.rs"), "fn main() {}\n").unwrap();
+
+    let status = ProcessCommand::new("cargo")
+        .args([
+            "generate-lockfile",
+            "--manifest-path",
+            workspace_root.join("Cargo.toml").to_str().unwrap(),
+        ])
+        .current_dir(&workspace_root)
+        .status()
+        .unwrap();
+    assert!(
+        status.success(),
+        "cargo generate-lockfile should succeed for git dependency fixture"
+    );
+
+    GitDependencyFixture {
+        _temp: temp,
+        workspace_root,
+    }
+}
+
+fn create_git_package_repo(
+    root: &Path,
+    repo_name: &str,
+    package_name: &str,
+    version: &str,
+    rust_version: &str,
+) -> PathBuf {
+    let repo_root = root.join(repo_name);
+    fs::create_dir_all(repo_root.join("src")).unwrap();
+    fs::write(
+        repo_root.join("Cargo.toml"),
+        format!(
+            "[package]\nname = \"{package_name}\"\nversion = \"{version}\"\nedition = \"2021\"\nrust-version = \"{rust_version}\"\n"
+        ),
+    )
+    .unwrap();
+    fs::write(
+        repo_root.join("src").join("lib.rs"),
+        "pub fn version() {}\n",
+    )
+    .unwrap();
+
+    run_git(["init"], &repo_root);
+    run_git(
+        ["config", "user.name", "Cargo Compatible Tests"],
+        &repo_root,
+    );
+    run_git(
+        ["config", "user.email", "tests@example.invalid"],
+        &repo_root,
+    );
+    run_git(["add", "."], &repo_root);
+    run_git(["commit", "-m", "initial"], &repo_root);
+    repo_root
+}
+
+fn run_git<const N: usize>(args: [&str; N], cwd: &Path) {
+    let status = ProcessCommand::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .status()
+        .unwrap();
+    assert!(
+        status.success(),
+        "git command {:?} should succeed in {}",
+        args,
+        cwd.display()
+    );
 }
 
 fn build_local_registry(registry_root: &Path, packages: &[LocalRegistryPackage]) {
@@ -312,6 +404,38 @@ fn explain_path_dep_markdown_snapshot() {
         .clone();
     let output = sanitize_text(&String::from_utf8(output).unwrap(), &fixture_root);
     assert_snapshot!("explain_path_dep_markdown", output);
+}
+
+#[test]
+fn scan_disambiguates_dependency_paths_for_same_name_git_packages() {
+    let fixture = stage_git_dependency_fixture();
+    let output = bin()
+        .current_dir(&fixture.workspace_root)
+        .args([
+            "scan",
+            "--manifest-path",
+            fixture.workspace_root.join("Cargo.toml").to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let stdout = String::from_utf8(output).unwrap();
+
+    let path_lines = stdout
+        .lines()
+        .filter(|line| line.trim_start().starts_with("via git-identity-chains:"))
+        .collect::<Vec<_>>();
+    assert_eq!(path_lines.len(), 2, "unexpected output:\n{stdout}");
+    assert_ne!(
+        path_lines[0], path_lines[1],
+        "dependency paths should be disambiguated"
+    );
+    assert!(path_lines
+        .iter()
+        .all(|line| line.contains("shared@0.1.0 [git: file://")));
+    assert!(path_lines.iter().all(|line| line.contains('#')));
 }
 
 #[test]

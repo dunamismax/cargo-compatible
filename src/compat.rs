@@ -1,3 +1,4 @@
+use crate::identity::{colliding_base_labels, unique_package_label};
 use crate::metadata::display_rust_version;
 use crate::model::{
     CompatibilityStatus, DependencyPath, PackageIssue, PackageSummary, ScanReport, SelectedMember,
@@ -20,11 +21,17 @@ pub fn analyze_current_workspace(
     let mut issues_by_id: BTreeMap<String, PackageIssue> = BTreeMap::new();
     let mut incompatible_counts: BTreeMap<String, usize> = BTreeMap::new();
     let mut unknown_counts: BTreeMap<String, usize> = BTreeMap::new();
+    let package_label_collisions = colliding_base_labels(
+        workspace
+            .packages_by_id
+            .values()
+            .map(|package| (package, workspace.workspace_root.as_path())),
+    );
     let paths_by_root = selection
         .members
         .iter()
         .map(|member| {
-            shortest_paths_from_root(workspace, member)
+            shortest_paths_from_root(workspace, member, &package_label_collisions)
                 .map(|paths| (member.package_id.clone(), paths))
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
@@ -231,6 +238,7 @@ fn parse_version_display(value: &str) -> Version {
 fn shortest_paths_from_root(
     workspace: &WorkspaceData,
     member: &SelectedMember,
+    package_label_collisions: &BTreeSet<String>,
 ) -> Result<BTreeMap<String, Vec<String>>> {
     let mut queue = VecDeque::from([member.package_id.clone()]);
     let mut predecessors = BTreeMap::<String, Option<String>>::new();
@@ -260,7 +268,11 @@ fn shortest_paths_from_root(
                 .packages_by_id
                 .get(&id)
                 .ok_or_else(|| anyhow!("package `{id}` missing from package map"))?;
-            chain.push(format!("{}@{}", package.name, package.version));
+            chain.push(unique_package_label(
+                package,
+                &workspace.workspace_root,
+                package_label_collisions,
+            ));
             current = predecessors.get(&id).cloned().flatten();
         }
         chain.reverse();
