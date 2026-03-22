@@ -1,10 +1,11 @@
 use crate::cli::OutputFormat;
 use crate::model::{
-    BlockerKind, CompatibilityStatus, ExplainReport, ManifestSuggestion, ResolveReport, ScanReport,
-    Selection, WorkspaceData,
+    BlockerKind, CandidateVersionChange, CompatibilityStatus, ExplainReport, ManifestSuggestion,
+    ResolveReport, ResolvedPackage, ScanReport, Selection, WorkspaceData,
 };
 use anyhow::Result;
 use itertools::Itertools;
+use std::path::Path;
 
 pub fn render_scan_report(report: &ScanReport, format: OutputFormat) -> Result<String> {
     match format {
@@ -93,8 +94,9 @@ fn render_scan_human(report: &ScanReport) -> String {
     } else {
         for issue in &report.incompatible_packages {
             lines.push(format!(
-                "  {}@{} ({})",
-                issue.package.name, issue.package.version, issue.reason
+                "  {} ({})",
+                format_package_identity(&issue.package, &report.workspace.workspace_root),
+                issue.reason
             ));
             for path in &issue.paths {
                 lines.push(format!(
@@ -112,8 +114,9 @@ fn render_scan_human(report: &ScanReport) -> String {
     } else {
         for issue in &report.unknown_packages {
             lines.push(format!(
-                "  {}@{} ({})",
-                issue.package.name, issue.package.version, issue.reason
+                "  {} ({})",
+                format_package_identity(&issue.package, &report.workspace.workspace_root),
+                issue.reason
             ));
             for path in &issue.paths {
                 lines.push(format!(
@@ -150,8 +153,12 @@ fn render_scan_markdown(report: &ScanReport) -> String {
     } else {
         for issue in &report.incompatible_packages {
             output.push(format!(
-                "- `{}`@`{}`: {}",
-                issue.package.name, issue.package.version, issue.reason
+                "- {}: {}",
+                backtick(&format_package_identity(
+                    &issue.package,
+                    &report.workspace.workspace_root,
+                )),
+                issue.reason
             ));
         }
     }
@@ -162,8 +169,12 @@ fn render_scan_markdown(report: &ScanReport) -> String {
     } else {
         for issue in &report.unknown_packages {
             output.push(format!(
-                "- `{}`@`{}`: {}",
-                issue.package.name, issue.package.version, issue.reason
+                "- {}: {}",
+                backtick(&format_package_identity(
+                    &issue.package,
+                    &report.workspace.workspace_root,
+                )),
+                issue.reason
             ));
         }
     }
@@ -187,7 +198,7 @@ fn render_resolve_human(report: &ResolveReport) -> String {
         for change in &report.version_changes {
             lines.push(format!(
                 "  {}: {} -> {}",
-                change.package_name,
+                format_version_change_identity(change),
                 change
                     .before
                     .clone()
@@ -233,13 +244,8 @@ fn render_resolve_markdown(report: &ResolveReport) -> String {
     } else {
         for change in &report.version_changes {
             lines.push(format!(
-                "- {}{}: `{}` -> `{}`",
-                backtick(&change.package_name),
-                change
-                    .source
-                    .as_ref()
-                    .map(|source| format!(" ({})", backtick(source)))
-                    .unwrap_or_default(),
+                "- {}: `{}` -> `{}`",
+                backtick(&format_version_change_identity(change)),
                 change.before.as_deref().unwrap_or("<none>"),
                 change.after.as_deref().unwrap_or("<none>"),
             ));
@@ -342,8 +348,8 @@ fn render_explain_human(report: &ExplainReport) -> String {
     ];
     if let Some(package) = &report.package {
         lines.push(format!(
-            "  resolved package: {}@{}",
-            package.name, package.version
+            "  resolved package: {}",
+            format_package_identity(package, Path::new("."))
         ));
     }
     if let Some(reason) = &report.current_reason {
@@ -377,9 +383,8 @@ fn render_explain_markdown(report: &ExplainReport) -> String {
     ];
     if let Some(package) = &report.package {
         lines.push(format!(
-            "- Resolved package: {}@{}",
-            backtick(&package.name),
-            backtick(&package.version.to_string())
+            "- Resolved package: {}",
+            backtick(&format_package_identity(package, Path::new(".")))
         ));
     }
     if let Some(status) = &report.current_status {
@@ -430,6 +435,66 @@ fn render_explain_markdown(report: &ExplainReport) -> String {
     lines.join("\n")
 }
 
+fn format_package_identity(package: &ResolvedPackage, workspace_root: &Path) -> String {
+    let mut label = format!("{}@{}", package.name, package.version);
+    if let Some(detail) = package_identity_detail(package, workspace_root) {
+        label.push_str(&format!(" [{detail}]"));
+    }
+    label
+}
+
+fn format_version_change_identity(change: &CandidateVersionChange) -> String {
+    let mut label = change.package_name.clone();
+    if let Some(detail) = source_detail(change.source.as_deref()) {
+        label.push_str(&format!(" [{detail}]"));
+    }
+    label
+}
+
+fn package_identity_detail(package: &ResolvedPackage, workspace_root: &Path) -> Option<String> {
+    match package.source_kind {
+        crate::model::PackageSourceKind::Workspace => Some("workspace".to_string()),
+        crate::model::PackageSourceKind::Path => Some(format!(
+            "path: {}",
+            display_path_detail(&package.manifest_path, workspace_root)
+        )),
+        crate::model::PackageSourceKind::Registry
+        | crate::model::PackageSourceKind::Git
+        | crate::model::PackageSourceKind::Unknown => source_detail(package.source.as_deref()),
+    }
+}
+
+fn source_detail(source: Option<&str>) -> Option<String> {
+    let source = source?;
+    if let Some(registry) = source.strip_prefix("registry+") {
+        let registry = match registry {
+            "https://github.com/rust-lang/crates.io-index" | "sparse+https://index.crates.io/" => {
+                "crates.io"
+            }
+            other => other,
+        };
+        return Some(format!("registry: {registry}"));
+    }
+    if let Some(git) = source.strip_prefix("git+") {
+        let git = git.split('#').next().unwrap_or(git);
+        return Some(format!("git: {git}"));
+    }
+    Some(source.to_string())
+}
+
+fn display_path_detail(manifest_path: &Path, workspace_root: &Path) -> String {
+    let directory = manifest_path.parent().unwrap_or(manifest_path);
+    if let Ok(relative) = directory.strip_prefix(workspace_root) {
+        if !relative.as_os_str().is_empty() {
+            return relative.display().to_string();
+        }
+    }
+    directory
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| directory.display().to_string())
+}
+
 fn backtick(value: &str) -> String {
     format!("`{value}`")
 }
@@ -462,5 +527,97 @@ fn blocker_kind(blocker: &BlockerKind) -> &'static str {
         }
         BlockerKind::PathOrGitConstraint => "path_or_git_constraint",
         BlockerKind::NonRegistryConstraint => "non_registry_constraint",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{render_resolve_human, render_scan_human};
+    use crate::model::{
+        CandidateVersionChange, CompatibilityStatus, DependencyPath, PackageIssue,
+        PackageSourceKind, PackageSummary, ResolveReport, ResolvedPackage, ScanReport,
+        TargetSelection, TargetSelectionMode, WorkspaceSummary,
+    };
+    use semver::Version;
+    use std::collections::BTreeSet;
+    use std::path::PathBuf;
+
+    #[test]
+    fn resolve_human_disambiguates_registry_version_changes() {
+        let report = ResolveReport {
+            current: empty_scan_report(),
+            candidate: empty_scan_report(),
+            version_changes: vec![CandidateVersionChange {
+                package_name: "compat-demo".to_string(),
+                source: Some("registry+https://github.com/rust-lang/crates.io-index".to_string()),
+                before: Some("1.2.0".to_string()),
+                after: Some("1.1.0".to_string()),
+            }],
+            improved_packages: Vec::new(),
+            remaining_blockers: Vec::new(),
+            candidate_lockfile: None,
+            notes: Vec::new(),
+        };
+
+        let rendered = render_resolve_human(&report);
+
+        assert!(rendered.contains("compat-demo [registry: crates.io]: 1.2.0 -> 1.1.0"));
+    }
+
+    #[test]
+    fn scan_human_labels_path_dependencies_with_relative_location() {
+        let mut report = empty_scan_report();
+        report.incompatible_packages.push(PackageIssue {
+            package: ResolvedPackage {
+                id: "path+file:///workspace/too_new#0.1.0".to_string(),
+                name: "too_new".to_string(),
+                version: Version::new(0, 1, 0),
+                source: None,
+                source_kind: PackageSourceKind::Path,
+                manifest_path: PathBuf::from("/workspace/too_new/Cargo.toml"),
+                rust_version: Some("1.70".to_string()),
+                workspace_member: false,
+            },
+            status: CompatibilityStatus::Incompatible,
+            target_rust_version: Some("1.60".to_string()),
+            reason: "resolved package declares rust-version 1.70, which exceeds target 1.60"
+                .to_string(),
+            affected_members: BTreeSet::from(["app".to_string()]),
+            paths: vec![DependencyPath {
+                member: "app".to_string(),
+                target_rust_version: Some("1.60".to_string()),
+                packages: vec!["app@0.1.0".to_string(), "too_new@0.1.0".to_string()],
+            }],
+        });
+
+        let rendered = render_scan_human(&report);
+
+        assert!(rendered.contains("too_new@0.1.0 [path: too_new]"));
+    }
+
+    fn empty_scan_report() -> ScanReport {
+        ScanReport {
+            target: TargetSelection {
+                mode: TargetSelectionMode::SelectedPackage,
+                target_rust_version: Some("1.60".to_string()),
+                members: Vec::new(),
+                notes: Vec::new(),
+            },
+            workspace: WorkspaceSummary {
+                workspace_root: PathBuf::from("/workspace"),
+                selected_members: vec!["app".to_string()],
+                is_virtual_workspace: false,
+                resolver: Some("3".to_string()),
+                recommendations: Vec::new(),
+            },
+            package_summaries: vec![PackageSummary {
+                package_name: "app".to_string(),
+                incompatible: 0,
+                unknown: 0,
+            }],
+            incompatible_packages: Vec::new(),
+            unknown_packages: Vec::new(),
+            notes: Vec::new(),
+        }
     }
 }

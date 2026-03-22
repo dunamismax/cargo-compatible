@@ -1,12 +1,12 @@
 ---
 source: tests/integration_cli.rs
-assertion_line: 139
+assertion_line: 314
 expression: output
 ---
 # Explanation
 - Query: `too_new`
 - Target selection: 1.60
-- Resolved package: `too_new`@`0.1.0`
+- Resolved package: `too_new@0.1.0 [path: too_new]`
 - Current status: `incompatible`
 - Current result: resolved package declares rust-version 1.70, which exceeds target 1.60
 - Current rust-version: `1.70`

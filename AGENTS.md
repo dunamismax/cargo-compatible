@@ -23,7 +23,7 @@ This file is concise repo memory for future agents and developers. `BUILD.md` is
 - `src/temp_workspace.rs`
   - Safe workspace copy logic for dry-run resolution experiments
 - `src/index.rs`
-  - crates.io sparse-index cache lookup, compatible candidate selection, and semver/property-test invariants
+  - crates.io sparse-index or local-registry lookup, compatible candidate selection, and semver/property-test invariants
 - `src/manifest_edit.rs`
   - Direct dependency inspection, conservative suggestion generation, and minimal TOML edits
 - `src/explain.rs`
@@ -39,7 +39,7 @@ This file is concise repo memory for future agents and developers. `BUILD.md` is
 - `deny.toml`
   - Cargo-deny policy for advisories, licenses, bans, and allowed sources
 - `tests/fixtures/*`
-  - Deterministic sample workspaces for missing rust-version, mixed-workspace, path dependency, and resolver-guidance cases
+  - Deterministic sample workspaces for missing rust-version, mixed-workspace, path dependency, local-registry manifest-blocker, and resolver-guidance cases
 
 ## Design Notes
 
@@ -47,9 +47,10 @@ This file is concise repo memory for future agents and developers. `BUILD.md` is
 - `scan` and `resolve` are dry-run-first workflows by design.
 - `resolve` uses a temporary workspace copy instead of mutating the real checkout.
 - Tracing is opt-in through `RUST_LOG`; normal command output remains unchanged unless tracing is enabled.
-- Manifest suggestions intentionally prefer conservative no-op behavior when registry cache data is missing or the dependency is non-registry.
+- Manifest suggestions intentionally prefer conservative no-op behavior when registry metadata is missing or the dependency is non-registry; they can read either the crates.io sparse cache or a crates.io `local-registry` replacement from workspace config.
 - `suggest-manifest --write-manifests` stages validated manifest edits before atomically persisting each file so later failures do not leave earlier manifests partially applied.
 - Output ordering is deterministic to keep human reports and snapshots stable.
+- Human and Markdown reports include lightweight workspace/path/registry identity labels where they materially reduce same-name package ambiguity.
 - `resolve` version-change details stay conservative when the same package name/source appears at multiple resolved versions; ambiguous identities are noted instead of being collapsed into a misleading single change line.
 - `--package` selection is exact by workspace member package name, package ID, or manifest path; avoid relying on substring path matches.
 - `explain` only succeeds for packages reachable from the selected dependency graph; out-of-scope queries should fail clearly.
@@ -74,7 +75,7 @@ cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.
 ## Current Gaps
 
 - `resolve` currently relies on stable Cargo commands in a full temp copy of the workspace, which is safe but can be slower on larger repos.
-- Manifest suggestion logic is strongest for normal direct crates.io dependencies and only uses the local sparse index cache.
+- Manifest suggestion logic is strongest for normal direct crates.io dependencies and currently relies on locally available sparse-index or local-registry metadata.
 - Feature validation is conservative and not a complete reimplementation of Cargo feature resolution semantics.
 - Mixed-workspace reasoning is explanatory rather than prescriptive; this version does not auto-edit `workspace.resolver = "3"`.
 - The Criterion benchmark is intentionally synthetic and path-only; it tracks large-workspace resolver overhead without exercising networked registry traffic.

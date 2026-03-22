@@ -11,6 +11,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use toml_edit::{value, DocumentMut, Item};
 
+const DEFAULT_CRATES_IO_SOURCE: &str = "registry+https://github.com/rust-lang/crates.io-index";
+
 pub fn suggest_manifest_changes(
     workspace: &WorkspaceData,
     selection: &Selection,
@@ -155,7 +157,7 @@ fn direct_dependency_constraints(
                 .unwrap_or_else(|| dependency.name.clone()),
             manifest_path: manifest_path.to_path_buf(),
             requirement: dependency.req.to_string(),
-            source: dependency.source.as_ref().map(ToString::to_string),
+            source: dependency_source(dependency),
             features: dependency.features.iter().cloned().collect::<BTreeSet<_>>(),
             uses_default_features: dependency.uses_default_features,
             optional: dependency.optional,
@@ -174,6 +176,23 @@ fn dependency_section_label(kind: DependencyKind) -> String {
         _ => "dependencies",
     }
     .to_string()
+}
+
+fn dependency_source(dependency: &cargo_metadata::Dependency) -> Option<String> {
+    if dependency.path.is_some() {
+        return None;
+    }
+    dependency
+        .source
+        .as_ref()
+        .map(ToString::to_string)
+        .or_else(|| {
+            dependency
+                .registry
+                .as_ref()
+                .map(|registry| format!("registry+{registry}"))
+        })
+        .or_else(|| Some(DEFAULT_CRATES_IO_SOURCE.to_string()))
 }
 
 fn package_identity(name: &str, source: Option<&str>) -> (String, Option<String>) {

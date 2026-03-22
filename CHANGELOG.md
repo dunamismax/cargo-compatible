@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added local-registry-backed manifest suggestion lookup plus deterministic end-to-end `suggest-manifest --write-manifests` coverage for a crates.io source-replacement fixture.
+- Added clearer human-facing package identity labels for workspace/path packages and resolve version changes so same-name crates are easier to distinguish in reports.
 - Tightened `--package` to use exact workspace member name/package-ID/manifest-path matching instead of manifest-path substring matches.
 - Made `explain` reject queries outside the selected dependency graph and clarified ambiguous-query guidance.
 - Made `resolve --write-report` write the same rendered format selected by `--format`, and added direct integration coverage for report/candidate write flows.

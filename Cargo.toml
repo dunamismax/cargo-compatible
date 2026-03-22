@@ -36,6 +36,7 @@ criterion = "0.8.2"
 insta = { version = "1.43", features = ["json"] }
 predicates = "3.1"
 proptest = "1.10.0"
+sha2 = "0.10"
 
 [[bench]]
 name = "large_workspace_resolver"

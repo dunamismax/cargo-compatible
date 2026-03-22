@@ -14,7 +14,7 @@ use clap::Parser;
 use cli::{Cli, Commands, OutputFormat, ResolveCommand};
 use compat::analyze_current_workspace;
 use explain::build_explain_report;
-use index::CratesIoIndex;
+use index::registry_lookup_for_workspace;
 use manifest_edit::{apply_manifest_suggestions, suggest_manifest_changes};
 use metadata::{load_workspace, select_packages};
 use report::{
@@ -76,12 +76,12 @@ fn dispatch(cli: Cli) -> Result<()> {
                     write_report: None,
                 },
             )?;
-            let registry = CratesIoIndex::new()?;
+            let registry = registry_lookup_for_workspace(&workspace.workspace_root)?;
             let suggestions = suggest_manifest_changes(
                 &workspace,
                 &selection,
                 &resolution,
-                &registry,
+                registry.as_ref(),
                 command.allow_major,
             )?;
             if command.write_manifests {

@@ -1,9 +1,11 @@
 use assert_cmd::Command;
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tempfile::tempdir;
+use std::process::Command as ProcessCommand;
+use tempfile::{tempdir, TempDir};
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -14,6 +16,166 @@ fn fixture(name: &str) -> PathBuf {
 
 fn bin() -> Command {
     Command::cargo_bin("cargo-compatible").expect("binary should build")
+}
+
+struct LocalRegistryFixture {
+    _temp: TempDir,
+    workspace_root: PathBuf,
+    cargo_home: PathBuf,
+}
+
+#[derive(Clone, Copy)]
+struct LocalRegistryPackage {
+    name: &'static str,
+    version: &'static str,
+    rust_version: &'static str,
+}
+
+fn stage_local_registry_fixture(workspace_fixture: &str) -> LocalRegistryFixture {
+    let temp = tempdir().unwrap();
+    let workspace_root = temp.path().join("workspace");
+    copy_dir_all(&fixture(workspace_fixture), &workspace_root);
+
+    let registry_root = temp.path().join("local-registry");
+    let packages = [
+        LocalRegistryPackage {
+            name: "compat-demo",
+            version: "1.1.0",
+            rust_version: "1.60",
+        },
+        LocalRegistryPackage {
+            name: "compat-demo",
+            version: "1.2.0",
+            rust_version: "1.70",
+        },
+    ];
+    build_local_registry(&registry_root, &packages);
+    write_local_registry_config(&workspace_root, &registry_root);
+
+    let cargo_home = temp.path().join("cargo-home");
+    fs::create_dir_all(&cargo_home).unwrap();
+
+    LocalRegistryFixture {
+        _temp: temp,
+        workspace_root,
+        cargo_home,
+    }
+}
+
+fn build_local_registry(registry_root: &Path, packages: &[LocalRegistryPackage]) {
+    fs::create_dir_all(registry_root.join("index").join("co").join("mp")).unwrap();
+    fs::write(
+        registry_root.join("index").join("config.json"),
+        format!(r#"{{"dl":"file://{}"}}"#, registry_root.display()),
+    )
+    .unwrap();
+
+    let mut entries = Vec::new();
+    for package in packages {
+        let crate_path = package_crate_archive(registry_root, package);
+        let bytes = fs::read(&crate_path).unwrap();
+        let checksum = format!("{:x}", Sha256::digest(&bytes));
+        entries.push(
+            serde_json::json!({
+                "name": package.name,
+                "vers": package.version,
+                "deps": [],
+                "cksum": checksum,
+                "features": {},
+                "yanked": false,
+                "rust_version": package.rust_version,
+            })
+            .to_string(),
+        );
+    }
+    let sparse_entry = entries.join("\n");
+    fs::write(
+        registry_root
+            .join("index")
+            .join("co")
+            .join("mp")
+            .join("compat-demo"),
+        format!("{sparse_entry}\n"),
+    )
+    .unwrap();
+}
+
+fn package_crate_archive(registry_root: &Path, package: &LocalRegistryPackage) -> PathBuf {
+    let package_root = registry_root
+        .parent()
+        .unwrap()
+        .join("package-sources")
+        .join(format!("{}-{}", package.name, package.version));
+    fs::create_dir_all(package_root.join("src")).unwrap();
+    fs::write(
+        package_root.join("Cargo.toml"),
+        format!(
+            "[package]\nname = \"{}\"\nversion = \"{}\"\nedition = \"2021\"\nrust-version = \"{}\"\ndescription = \"local registry fixture\"\nlicense = \"MIT\"\n",
+            package.name, package.version, package.rust_version
+        ),
+    )
+    .unwrap();
+    fs::write(
+        package_root.join("src").join("lib.rs"),
+        format!(
+            "pub fn version() -> &'static str {{ \"{}\" }}\n",
+            package.version
+        ),
+    )
+    .unwrap();
+
+    let manifest_path = package_root.join("Cargo.toml");
+    let status = ProcessCommand::new("cargo")
+        .args([
+            "package",
+            "--manifest-path",
+            manifest_path.to_str().unwrap(),
+            "--allow-dirty",
+            "--no-verify",
+            "--quiet",
+        ])
+        .status()
+        .unwrap();
+    assert!(
+        status.success(),
+        "cargo package should succeed for local registry fixture"
+    );
+
+    let packaged = package_root
+        .join("target")
+        .join("package")
+        .join(format!("{}-{}.crate", package.name, package.version));
+    let archive_path = registry_root.join(format!("{}-{}.crate", package.name, package.version));
+    fs::copy(&packaged, &archive_path).unwrap();
+    archive_path
+}
+
+fn write_local_registry_config(workspace_root: &Path, registry_root: &Path) {
+    let cargo_dir = workspace_root.join(".cargo");
+    fs::create_dir_all(&cargo_dir).unwrap();
+    fs::write(
+        cargo_dir.join("config.toml"),
+        format!(
+            "[source.crates-io]\nreplace-with = \"local\"\n\n[source.local]\nlocal-registry = \"{}\"\n\n[net]\noffline = true\n",
+            registry_root.display()
+        ),
+    )
+    .unwrap();
+}
+
+fn copy_dir_all(source: &Path, destination: &Path) {
+    fs::create_dir_all(destination).unwrap();
+    for entry in fs::read_dir(source).unwrap() {
+        let entry = entry.unwrap();
+        let file_type = entry.file_type().unwrap();
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_all(&source_path, &destination_path);
+        } else {
+            fs::copy(&source_path, &destination_path).unwrap();
+        }
+    }
 }
 
 fn write_basic_workspace(root: &Path, lockfile_contents: &str) {
@@ -383,6 +545,55 @@ fn resolve_write_candidate_writes_lockfile() {
     let candidate = fs::read_to_string(&candidate_path).unwrap();
     assert!(candidate.contains("[[package]]"));
     assert!(candidate.contains("name = \"member\""));
+}
+
+#[test]
+fn suggest_manifest_write_manifests_uses_local_registry_fixture_end_to_end() {
+    let fixture = stage_local_registry_fixture("local-registry-manifest-blocker");
+    let manifest_path = fixture.workspace_root.join("Cargo.toml");
+    let output = bin()
+        .current_dir(&fixture.workspace_root)
+        .env("CARGO_HOME", &fixture.cargo_home)
+        .args([
+            "suggest-manifest",
+            "--manifest-path",
+            manifest_path.to_str().unwrap(),
+            "--write-manifests",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let value: Value = serde_json::from_slice(&output).unwrap();
+    let suggestions = value
+        .get("manifest_suggestions")
+        .and_then(Value::as_array)
+        .expect("manifest suggestions array should exist");
+    assert_eq!(
+        value.get("write_manifests").and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(suggestions.len(), 1);
+    assert_eq!(
+        suggestions[0]
+            .get("dependency_name")
+            .and_then(Value::as_str),
+        Some("compat-demo")
+    );
+    assert_eq!(
+        suggestions[0]
+            .get("suggested_requirement")
+            .and_then(Value::as_str),
+        Some("1.1.0")
+    );
+
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    assert!(manifest.contains("compat-demo = \"1.1.0\""));
+    assert!(!manifest.contains("compat-demo = \"=1.2.0\""));
 }
 
 #[test]

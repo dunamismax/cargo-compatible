@@ -1,10 +1,11 @@
 ---
 source: tests/integration_cli.rs
+assertion_line: 293
 expression: output
 ---
 Explanation
   query: too_new
-  resolved package: too_new@0.1.0
+  resolved package: too_new@0.1.0 [path: too_new]
   current result: resolved package declares rust-version 1.70, which exceeds target 1.60
   blocker: PathOrGitConstraint
 

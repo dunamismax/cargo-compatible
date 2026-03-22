@@ -21,7 +21,7 @@ It focuses on five workflows:
 - Shows dependency paths from selected workspace members to problematic packages.
 - Builds candidate lockfiles in a temporary workspace without mutating your real checkout.
 - Applies a saved candidate lockfile only on explicit command.
-- Suggests conservative direct dependency requirement changes for crates.io dependencies when lockfile-only resolution is not enough, using Cargo's sparse local registry cache when available.
+- Suggests conservative direct dependency requirement changes for crates.io dependencies when lockfile-only resolution is not enough, using Cargo's sparse cache or a crates.io local-registry replacement from `.cargo/config.toml` when available.
 
 ## Safety Model
 
@@ -96,7 +96,7 @@ cargo compatible suggest-manifest --package app --allow-major
 
 ### `cargo compatible explain`
 
-Explains why a package is present and why it is incompatible or unknown. Queries must resolve inside the selected dependency graph; use a package ID or `name@version` when a short name is ambiguous.
+Explains why a package is present and why it is incompatible or unknown. Queries must resolve inside the selected dependency graph; use a package ID or `name@version` when a short name is ambiguous. Human and Markdown output now label resolved workspace/path packages with extra source context to reduce same-name confusion.
 
 ```bash
 cargo compatible explain serde
@@ -142,7 +142,7 @@ The JSON reports are intentionally structured around stable sections instead of 
 ## Current Limitations
 
 - Manifest suggestions are intentionally conservative and currently focus on normal direct dependencies.
-- Manifest suggestions depend on crates.io sparse index entries already present in the local Cargo cache; uncached crates are reported conservatively with no rewrite suggestion.
+- Manifest suggestions depend on crates.io metadata being locally available, either through the sparse cache or through a workspace-level crates.io `local-registry` replacement; otherwise uncached crates are reported conservatively with no rewrite suggestion.
 - Feature validation uses registry feature names and optional dependency feature inference; it does not model every Cargo feature edge case.
 - `resolve` currently re-runs Cargo in a full temp copy of the workspace, which favors correctness and safety over speed.
 - Detailed `resolve` version-change reporting stays conservative when multiple resolved versions share the same package name and source; ambiguous cases are noted instead of being collapsed into a misleading single before/after pair.

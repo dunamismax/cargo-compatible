@@ -2,7 +2,11 @@ use crate::model::{DependencyConstraint, RegistryCandidate};
 use anyhow::{Context, Result};
 use crates_index::{Crate, SparseIndex};
 use semver::Version;
-use std::collections::BTreeSet;
+use serde::Deserialize;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+use toml_edit::DocumentMut;
 use tracing::debug;
 
 pub trait RegistryLookup {
@@ -13,8 +17,19 @@ pub trait RegistryLookup {
     ) -> Result<Option<RegistryCandidate>>;
 }
 
+pub fn registry_lookup_for_workspace(workspace_root: &Path) -> Result<Box<dyn RegistryLookup>> {
+    if let Some(path) = local_registry_path(workspace_root)? {
+        return Ok(Box::new(LocalRegistryIndex { root: path }));
+    }
+    Ok(Box::new(CratesIoIndex::new()?))
+}
+
 pub struct CratesIoIndex {
     index: SparseIndex,
+}
+
+struct LocalRegistryIndex {
+    root: PathBuf,
 }
 
 impl CratesIoIndex {
@@ -35,6 +50,36 @@ impl RegistryLookup for CratesIoIndex {
             return Ok(None);
         };
         select_best_candidate(&collect_candidates(&krate), dependency, allow_major)
+    }
+}
+
+impl RegistryLookup for LocalRegistryIndex {
+    fn highest_compatible(
+        &self,
+        dependency: &DependencyConstraint,
+        allow_major: bool,
+    ) -> Result<Option<RegistryCandidate>> {
+        let candidates = self.load_candidates(&dependency.package_name)?;
+        select_best_candidate(&candidates, dependency, allow_major)
+    }
+}
+
+impl LocalRegistryIndex {
+    fn load_candidates(&self, crate_name: &str) -> Result<Vec<RegistryCandidate>> {
+        let index_path = self
+            .root
+            .join("index")
+            .join(local_registry_index_path(crate_name)?);
+        let Ok(contents) = fs::read_to_string(&index_path) else {
+            return Ok(Vec::new());
+        };
+        let mut candidates = contents
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| parse_local_registry_candidate(line, crate_name))
+            .collect::<Result<Vec<_>>>()?;
+        candidates.sort_by(|left, right| left.version.cmp(&right.version));
+        Ok(candidates)
     }
 }
 
@@ -144,6 +189,114 @@ fn parse_requirement_anchor(requirement: &str) -> Option<u64> {
         .split('.')
         .next()
         .and_then(|value| value.parse::<u64>().ok())
+}
+
+fn local_registry_path(workspace_root: &Path) -> Result<Option<PathBuf>> {
+    let config_path = workspace_root.join(".cargo").join("config.toml");
+    let contents = match fs::read_to_string(&config_path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let document = contents.parse::<DocumentMut>()?;
+    let source = document.get("source").and_then(|item| item.as_table_like());
+    let Some(source) = source else {
+        return Ok(None);
+    };
+    let replace_with = source
+        .get("crates-io")
+        .and_then(|item| item.as_table_like())
+        .and_then(|table| table.get("replace-with"))
+        .and_then(|item| item.as_value())
+        .and_then(|value| value.as_str());
+    let Some(replace_with) = replace_with else {
+        return Ok(None);
+    };
+    let local_registry = source
+        .get(replace_with)
+        .and_then(|item| item.as_table_like())
+        .and_then(|table| table.get("local-registry"))
+        .and_then(|item| item.as_value())
+        .and_then(|value| value.as_str());
+    let Some(local_registry) = local_registry else {
+        return Ok(None);
+    };
+    let path = Path::new(local_registry);
+    let base = config_path.parent().unwrap_or(workspace_root);
+    Ok(Some(if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base.join(path)
+    }))
+}
+
+fn local_registry_index_path(crate_name: &str) -> Result<PathBuf> {
+    let name = crate_name.to_lowercase();
+    let path = match name.len() {
+        1 => PathBuf::from("1").join(name),
+        2 => PathBuf::from("2").join(name),
+        3 => PathBuf::from("3").join(&name[0..1]).join(name),
+        len if len >= 4 => PathBuf::from(&name[0..2]).join(&name[2..4]).join(name),
+        _ => anyhow::bail!("crate name `{crate_name}` is not a valid registry index key"),
+    };
+    Ok(path)
+}
+
+fn parse_local_registry_candidate(line: &str, crate_name: &str) -> Result<RegistryCandidate> {
+    let version: LocalRegistryVersion = serde_json::from_str(line)
+        .with_context(|| format!("failed to parse local registry entry for `{crate_name}`"))?;
+    let mut features = version.features.into_keys().collect::<BTreeSet<_>>();
+    for dependency in version.deps {
+        if dependency.optional {
+            features.insert(dependency.name);
+        }
+    }
+    Ok(RegistryCandidate {
+        version: Version::parse(&version.vers)
+            .with_context(|| format!("invalid version `{}` for `{crate_name}`", version.vers))?,
+        rust_version: version
+            .rust_version
+            .as_deref()
+            .map(normalize_rust_version)
+            .transpose()
+            .with_context(|| {
+                format!(
+                    "invalid rust-version `{}` for `{crate_name}`",
+                    version.rust_version.unwrap_or_default()
+                )
+            })?,
+        yanked: version.yanked,
+        features,
+    })
+}
+
+fn normalize_rust_version(value: &str) -> Result<Version, semver::Error> {
+    let parts = value.split('.').collect::<Vec<_>>();
+    let normalized = match parts.len() {
+        1 => format!("{}.0.0", parts[0]),
+        2 => format!("{}.{}.0", parts[0], parts[1]),
+        _ => value.to_string(),
+    };
+    Version::parse(&normalized)
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalRegistryVersion {
+    vers: String,
+    #[serde(default)]
+    deps: Vec<LocalRegistryDependency>,
+    #[serde(default)]
+    features: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    yanked: bool,
+    rust_version: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalRegistryDependency {
+    name: String,
+    #[serde(default)]
+    optional: bool,
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 ---
 source: tests/integration_cli.rs
+assertion_line: 274
 expression: output
 ---
 Current State
@@ -14,7 +15,7 @@ Package Summaries
   shared: 0 incompatible, 0 unknown
 
 Incompatible Packages
-  shared@0.1.0 (resolved package declares rust-version 1.65, which exceeds target 1.60)
+  shared@0.1.0 [workspace] (resolved package declares rust-version 1.65, which exceeds target 1.60)
     via low: low@0.1.0 -> shared@0.1.0
 
 Unknown Packages

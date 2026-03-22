@@ -340,7 +340,7 @@ Status: in progress
 - [x] Add focused tests for short package names, ambiguous path fragments, and out-of-scope `explain` queries.
 - [x] Stop collapsing ambiguous multi-version same-identity resolve diffs into misleading single before/after pairs.
 - [x] Make manifest-suggestion blocker matching source-aware so same-name crates from other sources do not trigger bogus rewrite suggestions.
-- [ ] Finish the remaining package-identity cleanup in human-facing resolve/explain output where same-name crates can still be hard to distinguish without package IDs.
+- [ ] Extend the remaining package-identity cleanup beyond the current resolved-package/version-change/workspace/path labels into dependency-path chains and harder same-name multi-source cases.
 
 Exit criteria:
 
@@ -357,7 +357,8 @@ Status: in progress
 - [x] Add direct coverage for `--write-report`.
 - [x] Add direct file-write coverage for `--write-manifests`.
 - [x] Verify failure behavior for missing candidate lockfiles and partial-write scenarios where practical.
-- [ ] Add fixture scenarios that exercise true lockfile-only improvements and direct manifest blocker cases.
+- [x] Add a deterministic local-registry fixture that exercises direct manifest blocker cases end to end.
+- [ ] Add a fixture scenario that exercises a true lockfile-only improvement.
 
 Exit criteria:
 
@@ -399,19 +400,20 @@ Exit criteria:
 ## Risk Register
 
 - Some human-facing resolve/explain summaries still do not fully disambiguate same-name crates across all multi-source or same-version query/report cases; package IDs remain the escape hatch.
-- End-to-end `--write-manifests` CLI coverage is still weaker than the direct file-write coverage because a deterministic local registry fixture has not landed yet.
+- A true lockfile-only improvement fixture is still missing; the current temp-copy `cargo update --workspace` strategy preserves existing lockfile choices, so a nontrivial improvement/reporting scenario needs a deliberately chosen repro or an explicit strategy change.
 - The temp-copy resolution model is intentionally safe, but it may become a performance pain point on larger real-world workspaces if not measured carefully.
 - Manifest suggestion quality depends on sparse-index cache availability and intentionally does not reimplement full Cargo feature resolution.
 - The current benchmark is useful but synthetic; it does not yet prove behavior on registry-heavy or feature-heavy repositories.
 
 ## Immediate Next Moves
 
-1. Finish the remaining human-facing package-identity cleanup so same-name crates are easier to distinguish in resolve/explain output without having to fall back to package IDs as often.
-2. Add a deterministic local-registry fixture so `suggest-manifest --write-manifests` can be covered end to end, not only at the direct file-write layer.
-3. Add a fixture that demonstrates a true lockfile-only improvement so the write-path/reporting flow is exercised against a less trivial resolution change.
+1. Extend package-identity disambiguation into dependency-path chains and the harder same-name multi-source cases that still fall back to package IDs.
+2. Add a fixture that demonstrates a true lockfile-only improvement so the write-path/reporting flow is exercised against a less trivial resolution change.
+3. Record whether that lockfile-only scenario needs a new repro fixture, a different Cargo invocation strategy, or an explicitly deferred design decision.
 
 ## Progress Log
 
+- 2026-03-22: Added source-aware human report labels for resolved/workspace/path packages, taught manifest suggestions to read a crates.io local-registry replacement from workspace `.cargo/config.toml`, and added deterministic end-to-end `suggest-manifest --write-manifests` coverage via a local-registry fixture. Verified with: `cargo fmt --check`, `cargo test report::tests:: --lib`, `cargo test --test integration_cli suggest_manifest_write_manifests_uses_local_registry_fixture_end_to_end`, `cargo test --test integration_cli explain_path_dep`, `cargo test --test integration_cli scan_mixed_workspace_human_snapshot`. Stop point: a true lockfile-only improvement fixture is still missing because the current `cargo update --workspace` temp-copy flow preserves existing lockfile selections; that needs a deliberate repro or strategy change, not guesswork. Next: extend package-identity disambiguation into dependency-path chains and identify a credible lockfile-only improvement fixture.
 - 2026-03-22: Added direct `apply-lock` coverage, direct manifest-write coverage, and failure-path coverage for missing candidate lockfiles plus partial manifest-apply scenarios; also hardened package identity handling by making manifest-suggestion blocker matching source-aware and by omitting ambiguous multi-version same-identity resolve diffs instead of collapsing them incorrectly. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, `cargo nextest run`, `~/.cargo/bin/cargo-deny check`, `cargo bench --bench large_workspace_resolver --no-run`, `cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.toml`, `cargo run -- resolve --manifest-path tests/fixtures/virtual-workspace/Cargo.toml --workspace --format markdown`. Next: add a deterministic local-registry fixture for end-to-end `--write-manifests` coverage and keep tightening human-facing package identity disambiguation.
 - 2026-03-22: Tightened `--package` to exact workspace-member name/package-ID/manifest-path matching, scoped `explain` to the selected dependency graph, made `resolve --write-report` follow `--format`, improved low-risk package identity labeling in resolve/explain, and added direct integration coverage for `--write-report`/`--write-candidate`. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, `cargo nextest run`, `~/.cargo/bin/cargo-deny check`, `cargo bench --bench large_workspace_resolver --no-run`, `cargo run -- scan --manifest-path tests/fixtures/mixed-workspace/Cargo.toml --package tests/fixtures/mixed-workspace/members/high/Cargo.toml --format json`, `cargo run -- scan --manifest-path tests/fixtures/mixed-workspace/Cargo.toml --package members` (expected failure), `cargo run -- explain low --manifest-path tests/fixtures/mixed-workspace/Cargo.toml --package high` (expected failure), `tmpdir=$(mktemp -d) && cargo run -- resolve --manifest-path tests/fixtures/virtual-workspace/Cargo.toml --workspace --format markdown --write-report "$tmpdir/report.md"`. Next: finish the remaining package-identity cleanup and cover the higher-risk mutating paths.
 - 2026-03-20: Audited the repository, captured the implemented command surface, source files, fixture coverage, current limitations, and verified local workflow in the original `BUILD.md`. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, `cargo nextest run`, `~/.cargo/bin/cargo-deny check`, `cargo bench --bench large_workspace_resolver --no-run`, `cargo run -- --help`, `cargo run -- scan --manifest-path tests/fixtures/path-too-new/Cargo.toml`, `cargo run -- explain too_new --manifest-path tests/fixtures/path-too-new/Cargo.toml`, `cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.toml`. Next: perform a deeper code review and identify correctness gaps.
@@ -430,7 +432,7 @@ Exit criteria:
 - 2026-03-20: Missing dependency `rust-version` metadata is treated as `unknown`, not compatible - safer than optimistic guessing and matches the current analysis model - reports and follow-up logic must preserve that distinction.
 - 2026-03-20: `resolve` runs in a temporary workspace copy rather than mutating the real checkout - favors safety and debuggability over raw speed - future performance work must justify any change to this model explicitly.
 - 2026-03-20: `apply-lock` requires an explicit candidate lockfile path and applies it atomically - keeps the mutating step narrow and intentional - users should never get an implicit lockfile rewrite from a read-only command.
-- 2026-03-20: Manifest suggestions stay conservative and use locally cached crates.io sparse-index metadata only - prevents fake certainty for uncached, path, or git dependencies - no suggestion is better than a bogus one.
+- 2026-03-20: Manifest suggestions stay conservative and use locally available crates.io metadata only, now from either the sparse cache or a crates.io `local-registry` replacement - prevents fake certainty for uncached, path, or git dependencies - no suggestion is better than a bogus one.
 - 2026-03-20: Tracing is opt-in through `RUST_LOG` - keeps machine-readable and human-readable CLI output stable by default - debug detail should not leak into normal command output.
 - 2026-03-20: Path and git dependencies are analysis/explain surfaces, not fake downgrade-target surfaces - the tool can report them as blockers without inventing crates.io-based edits - suggestion logic should keep that boundary.
 - 2026-03-21: `cargo-deny` duplicate-version findings remain informational warnings under the current policy - useful signal without blocking the repo on transitive dependency churn - dependency-policy tightening can happen later if it becomes materially valuable.
