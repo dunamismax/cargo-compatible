@@ -10,7 +10,7 @@
 
 `cargo-compatible` is a Cargo subcommand that answers "does my resolved dependency graph fit the Rust version I care about?" It scans your lockfile, classifies every package as compatible, incompatible, or unknown, and offers a safe, incremental path to fix blockers — lockfile changes first, manifest edits only when necessary.
 
-> **Status: v0.1 — correctness hardening.** The core command surface (`scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`) is implemented and published on crates.io. Active work focuses on package-identity disambiguation, write-path coverage, and operator trust. See [BUILD.md](BUILD.md) for the full execution plan.
+> **Status: v0.1 core implemented; post-hardening work is active.** The core command surface (`scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`) is implemented and published on crates.io. Current work is shifting into performance realism, release polish, and operator trust for v0.2. See [BUILD.md](BUILD.md) for the full execution plan.
 
 ## Why cargo-compatible?
 
@@ -237,9 +237,9 @@ All commands support `--format {human|json|markdown}`:
 | 1 | Core command surface and analysis engine | **Done** |
 | 2 | Safe resolution and manifest-suggestion workflow | **Done** |
 | 3 | Reporting, fixtures, CI, and benchmark baseline | **Done** |
-| 4 | Correctness hardening (selection, explain, report) | **In progress** |
-| 5 | Write-path and mutating-flow coverage | **In progress** |
-| 6 | Performance realism and benchmark expansion | Planned |
+| 4 | Correctness hardening (selection, explain, report) | **Done** |
+| 5 | Write-path and mutating-flow coverage | **Done** |
+| 6 | Performance realism and benchmark expansion | **Next** |
 | 7 | Release polish and operator trust cleanup | Planned |
 | 8 | CI/CD hardening and release automation | Planned |
 | 9 | Ecosystem integration and interoperability | Planned |
@@ -280,7 +280,7 @@ See [`BUILD.md`](BUILD.md) for the full development manual, phase tracking, and 
 
 ## Contributing
 
-cargo-compatible is in active correctness hardening. Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup, coding standards, and PR guidelines. Design feedback and bug reports are always valuable — open an issue.
+cargo-compatible is actively moving from correctness hardening into performance and release-polish work. Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup, coding standards, and PR guidelines. Design feedback and bug reports are always valuable — open an issue.
 
 ## License
 

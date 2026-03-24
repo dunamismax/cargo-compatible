@@ -4,7 +4,7 @@
 
 This file is the canonical execution and tracking document for `cargo-compatible`.
 
-It keeps the repo honest while the project moves from correctness hardening toward release polish and ecosystem integration. At any point it should answer:
+It keeps the repo honest while the project turns a proven v0.1 core into a faster, clearer, more adoptable tool. At any point it should answer:
 
 - what cargo-compatible is trying to become
 - what exists right now
@@ -76,24 +76,29 @@ The non-goal boundary is equally important: this tool should never become an alt
 
 ## Repo snapshot
 
-**Current phase: v0.1 — correctness hardening complete (Phases 4–5 done, Phase 6+ next)**
+**Current execution window: Phases 6–8 kickoff — turn a proven v0.1 core into a measurable, operator-trustworthy v0.2 release path.**
 
-What exists:
+What exists today:
 - Full command surface: `scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`
 - Fixture-backed integration tests and snapshot coverage
-- CI gate with fmt, clippy, test, nextest, cargo-deny, and benchmark compilation
+- CI gate with fmt, clippy, cross-platform nextest/doc tests, MSRV, cargo-deny, dogfood scan, and benchmark compilation
 - Human, JSON, and Markdown output modes
 - Published on crates.io as `cargo-compatible` 0.1.0
 
-What was hardened in Phases 4–5:
-- Package-identity disambiguation in dependency-path chains and explain reports
-- Write-path and mutating-flow coverage
-- True lockfile-only improvement fixture with local-registry-backed integration tests
-- Resolution command updated to use `cargo update` (without `--workspace`) for proper dependency upgrading
+What Phases 4–5 proved:
+- Package-identity disambiguation is materially better in dependency-path chains and explain reports
+- High-risk write paths now have direct coverage instead of hand-wavy confidence
+- The repo has a true lockfile-only improvement fixture backed by a deterministic local registry
+- `resolve` now actually upgrades compatible dependencies in the temp workspace by using `cargo update` without `--workspace`
+
+What is actively being driven next:
+- Measured performance baselines for `scan` and `resolve`, especially around temp-workspace copy cost
+- Operator-trust polish: help text, docs, sample outputs, and error semantics that match the shipped behavior exactly
+- Release automation choices for a credible v0.2 story rather than a forever-0.1 holding pattern
 
 What does **not** exist yet:
 - Formal JSON output schema versioning
-- Windows CI matrix
+- Binary release automation or crates.io publish-on-tag workflow
 - Feature-aware compatibility analysis
 - Project-level config file support
 
@@ -164,13 +169,12 @@ The shipped workflow currently supports:
 
 ### Remaining work shape
 
-This repository is no longer in a greenfield feature-planning phase. The current work is correctness hardening and operator trust building around:
+This repository is past greenfield invention, but it is not in maintenance stasis. The command surface exists; the next stretch is about making the tool faster to trust, easier to adopt, and harder to misread:
 
-- broader confidence in the remaining mutating and file-writing flows
-- deeper same-name and multi-source package-identity disambiguation in human-facing output
-- more realistic performance evidence beyond the current synthetic benchmark
-- release-polish passes that keep the public docs as accurate as the code and snapshots
-- CI hardening and ecosystem integration for real-world adoption
+- replace synthetic-only performance intuition with measurements tied to actual repo workflows
+- tighten the operator experience so CLI help, docs, reports, and errors all tell the same story
+- turn the already-good CI foundation into a repeatable release path with artifacts and stronger adoption hooks
+- decide which advanced analysis features actually earn their complexity before v0.2 scope balloons
 
 ---
 
@@ -227,6 +231,8 @@ Use this language consistently in docs, commits, and issues:
 | **done** | Implemented and verified |
 | **checked** | Verified by command or test output |
 | **planned** | Intentional, not started |
+| **ready** | Scoped well enough that it should be the next execution lane |
+| **queued** | Important follow-on work with known prerequisites or sequencing |
 | **in-progress** | Actively being worked on |
 | **blocked** | Cannot proceed without a decision or dependency |
 | **risk** | Plausible failure mode that could distort the design |
@@ -316,222 +322,205 @@ Every dependency addition must be justified in the decisions log with: what it r
 
 ## Phase dashboard
 
-### Completed phases
+### Recently completed
 
 - Phase 0 - repo charter, source-of-truth mapping, and verification baseline. Status: **done**.
 - Phase 1 - core command surface and analysis engine. Status: **done**.
 - Phase 2 - safe resolution and manifest-suggestion workflow. Status: **done**.
 - Phase 3 - reporting, fixtures, CI, and benchmark baseline. Status: **done**.
-
-### Active phases
-
 - Phase 4 - correctness hardening for package selection, explain scope, and report semantics. Status: **done**.
 - Phase 5 - write-path and mutating-flow coverage. Status: **done**.
 
-### Planned phases
+### Current execution window
 
-- Phase 6 - performance realism and benchmark expansion. Status: **not started**.
-- Phase 7 - release polish and operator trust cleanup. Status: **not started**.
-- Phase 8 - CI/CD hardening and release automation. Status: **not started**.
-- Phase 9 - ecosystem integration and interoperability. Status: **not started**.
-- Phase 10 - advanced analysis and resolution intelligence. Status: **not started**.
-- Phase 11 - documentation, examples, and onboarding. Status: **not started**.
-- Phase 12 - community readiness and 1.0 roadmap. Status: **not started**.
+- Phase 6 - performance realism and benchmark expansion. Status: **ready**.
+- Phase 7 - release polish and operator trust cleanup. Status: **queued**.
+- Phase 8 - CI/CD hardening and release automation. Status: **planned** with meaningful groundwork already **done**.
 
----
+### Forward roadmap
 
-## Active phase detail
-
-### Phase 4 - correctness hardening for package selection, explain scope, and report semantics
-
-Status: done
-
-- [x] Replace loose manifest-path substring matching with exact package-name, package-id, or normalized manifest-path matching.
-- [x] Make `explain` require reachability from the selected dependency graph instead of merely existing somewhere in metadata.
-- [x] Make `resolve --write-report` honor `--format` and pin it down with tests.
-- [x] Add focused tests for short package names, ambiguous path fragments, and out-of-scope `explain` queries.
-- [x] Stop collapsing ambiguous multi-version same-identity resolve diffs into misleading single before or after pairs.
-- [x] Make manifest-suggestion blocker matching source-aware so same-name crates from other sources do not trigger bogus rewrite suggestions.
-- [x] Extend the remaining package-identity cleanup into dependency-path chains and the harder same-name multi-source cases that still need package-ID fallback.
-
-Exit criteria:
-
-- [x] Package selection can no longer silently widen the analysis scope.
-- [x] `explain` success means the queried package is actually in the selected graph.
-- [x] File-report behavior is explicit, tested, and unsurprising.
-
-### Phase 5 - write-path and mutating-flow coverage
-
-Status: done
-
-- [x] Add temp-dir integration coverage for `apply-lock`.
-- [x] Add direct coverage for `--write-candidate`.
-- [x] Add direct coverage for `--write-report`.
-- [x] Add direct file-write coverage for `--write-manifests`.
-- [x] Verify failure behavior for missing candidate lockfiles and partial-write scenarios where practical.
-- [x] Add a deterministic local-registry fixture that exercises direct manifest blocker cases end to end.
-- [x] Add a fixture scenario that exercises a true lockfile-only improvement.
-
-Exit criteria:
-
-- [x] The highest-risk write paths are verified by tests or explicitly recorded manual proof, not assumed from code reading.
+- Phase 9 - ecosystem integration and interoperability. Status: **planned**.
+- Phase 10 - advanced analysis and resolution intelligence. Status: **planned**.
+- Phase 11 - documentation, examples, and onboarding. Status: **planned**.
+- Phase 12 - community readiness and 1.0 roadmap. Status: **planned**.
 
 ---
 
-## Planned phase detail
+## Phase detail
 
 ### Phase 6 - performance realism and benchmark expansion
 
-Status: not started
+Status: ready
 
-Goal: prove the tool performs acceptably on real-world workspace sizes and identify optimization targets before they become release blockers.
+Goal: replace hand-wavy performance assumptions with measurements that reflect how people will actually run `cargo-compatible`.
 
-- [ ] Expand the Criterion surface beyond the current path-only synthetic benchmark.
-- [ ] Add scenarios that better approximate registry-heavy or feature-heavy workspaces.
-- [ ] Measure whether the temp-copy resolution model needs targeted optimization while preserving its safety properties.
-- [ ] Add benchmarks for the analysis pass itself (graph walking, dependency-path computation).
-- [ ] Profile memory usage on large workspaces (500+ resolved packages).
-- [ ] Record meaningful resolver-performance conclusions here instead of relying on memory.
-- [ ] Establish performance regression thresholds in CI (fail if scan takes >Xms on the synthetic workspace).
+Why this is next:
+- The correctness surface is strong enough that performance is now the most likely trust drag on larger repos.
+- The temp-workspace safety model is worth keeping unless measurements prove it is the bottleneck.
+- Release polish is easier to do honestly once the runtime characteristics are known.
+
+Work to do:
+
+- [ ] Add a second benchmark harness that reuses real fixture-derived workspaces instead of only generated path-only trees.
+- [ ] Split timing capture so metadata loading, compatibility analysis, temp-workspace copy, and resolver invocation can be measured separately.
+- [ ] Benchmark `scan` and `resolve` against at least three scales: a small fixture workspace, the current large synthetic workspace, and a registry-backed or feature-heavier scenario.
+- [ ] Measure whether the full temp-workspace copy is materially more expensive than the resolver work itself before considering optimization.
+- [ ] Record baseline numbers directly in this file so future changes can be compared against something real.
+- [ ] Profile memory growth on larger synthetic workspaces and note any obvious pressure points.
+- [ ] Decide whether CI should enforce any performance threshold now or wait until benchmark noise is better understood.
 
 Exit criteria:
 
-- [ ] At least two benchmark scenarios beyond the current synthetic one.
-- [ ] Documented performance characteristics for workspaces of various sizes.
-- [ ] Any optimization decisions are driven by measurement, not guessing.
+- [ ] At least two benchmark scenarios exist beyond the current path-only synthetic case.
+- [ ] `scan` and `resolve` each have attributable timing baselines, not just a single aggregate number.
+- [ ] Any proposed optimization is justified by measured evidence, not discomfort with the current design.
 
 ### Phase 7 - release polish and operator trust cleanup
 
-Status: not started
+Status: queued
 
-Goal: make the 0.2 release artifact trustworthy, well-documented, and unsurprising for first-time users.
+Goal: make the first-run experience sharp enough that the repo reads like a tool people can adopt immediately, not just a promising prototype.
 
-- [ ] Refresh `README.md`, `CHANGELOG.md`, and `BUILD.md` after the current hardening phases land.
-- [ ] Ensure output-file semantics and CLI examples match the actual shipped behavior.
-- [ ] Revisit remaining known limitations and classify them as fixed, intentionally deferred, or release-blocking.
-- [ ] Tighten any remaining doc wording that overstates coverage or confidence.
-- [ ] Verify `--help` text for every subcommand against actual behavior.
-- [ ] Ensure all error messages are actionable (tell the user what to do, not just what failed).
-- [ ] Add shell completion generation (`clap_complete`).
-- [ ] Review and finalize the JSON output schema for stability guarantees.
+Why this follows Phase 6:
+- Performance claims and examples should not get ahead of the measurements.
+- The docs/help/error pass should describe the real product, not the hoped-for one.
+- This phase is where the public surface gets tightened before broader CI and ecosystem integrations land.
+
+Work to do:
+
+- [ ] Re-run every README command example against the current CLI and fix or delete anything aspirational.
+- [ ] Audit `--help` text for every subcommand so flags, defaults, and safety notes match actual behavior.
+- [ ] Add at least one concise end-to-end sample output for `scan`, `resolve`, and `explain` that reflects real snapshots.
+- [ ] Tighten error messages around missing registry metadata, unreachable `explain` targets, and write-path preconditions so users get a next action, not just a failure.
+- [ ] Document when and why package IDs appear as the fallback identity in human-facing output.
+- [ ] Decide whether the JSON schema is versioned in v0.2 or explicitly marked unstable until v0.3.
+- [ ] Decide whether shell completions belong in the v0.2 scope or should wait until the output contract is more settled.
 
 Exit criteria:
 
-- [ ] A new user can install, run `cargo compatible scan --workspace`, and understand the output without reading BUILD.md.
-- [ ] JSON output schema is documented and versioned.
-- [ ] All CLI examples in README actually work as shown.
+- [ ] A new user can install the crate, run the README quick start, and get exactly the behavior the docs promise.
+- [ ] The help surface is internally consistent across README, clap help text, and emitted reports.
+- [ ] The JSON output stability story is explicit rather than implied.
 
 ### Phase 8 - CI/CD hardening and release automation
 
-Status: not started
+Status: planned (foundation partly done)
 
-Goal: make the release process repeatable, safe, and confidence-inspiring for both maintainers and users.
+Goal: turn the repo's current verification discipline into a repeatable, low-drama release path.
 
-- [x] Add MSRV verification to CI (test against the declared `rust-version` in Cargo.toml).
+Work to do:
+
+- [x] Add MSRV verification to CI (test against the declared `rust-version` in `Cargo.toml`).
 - [x] Add cross-platform CI matrix (Linux, macOS, Windows).
-- [ ] Add a release workflow that publishes to crates.io on tag push with changelog validation.
-- [ ] Add binary release builds for common platforms (Linux x86_64/aarch64, macOS x86_64/aarch64, Windows x86_64) via `cargo-dist` or manual cross-compilation.
-- [ ] Add `cargo-audit` to CI for security advisory checks beyond `cargo-deny`.
-- [ ] Add integration test coverage that runs against a real published crate's workspace (smoke test against a known-good external project).
 - [x] Add CI job that runs the tool against its own workspace as a dogfood gate.
-- [ ] Consider `cargo-semver-checks` to prevent accidental breaking changes to the public API.
-- [ ] Add dependabot or renovate for automated dependency updates.
+- [ ] Add a release workflow that publishes to crates.io on tag push with changelog validation.
+- [ ] Add binary release builds for common platforms (Linux x86_64/aarch64, macOS x86_64/aarch64, Windows x86_64) via `cargo-dist` or explicit cross-compilation.
+- [ ] Add `cargo-audit` to CI for security advisory checks beyond `cargo-deny`.
+- [ ] Add integration coverage that runs the tool against a known external workspace, not only local fixtures.
+- [ ] Decide whether `cargo-semver-checks` is worth the complexity for a primarily CLI-focused crate.
+- [ ] Add dependabot or renovate for regular dependency update pressure.
 
 Exit criteria:
 
-- [ ] Tagging a release on GitHub produces crates.io publish + binary artifacts automatically.
-- [ ] CI catches MSRV regressions before they ship.
-- [ ] The tool successfully analyzes itself in CI.
+- [ ] Tagging a release can produce a publishable crate and binary artifacts without ad hoc shell work.
+- [ ] CI catches platform, MSRV, and dogfood regressions before release day.
+- [ ] Security and maintenance automation are good enough that a v0.2 release does not depend on heroic memory.
 
 ### Phase 9 - ecosystem integration and interoperability
 
-Status: not started
+Status: planned
 
-Goal: make `cargo-compatible` a natural part of Rust development workflows rather than a standalone tool.
+Goal: make `cargo-compatible` fit naturally into CI systems, PR review flows, and adjacent Rust tooling.
 
-- [ ] Add `--exit-code` mode for CI usage (exit 1 if incompatible packages found, exit 0 if clean).
-- [ ] Add GitHub Actions integration (official action or documented workflow snippet).
+Work to do:
+
+- [ ] Add `--exit-code` mode for CI usage (exit 1 if incompatible packages are found, exit 0 if clean).
+- [ ] Add GitHub Actions integration (official action or a documented workflow snippet).
 - [ ] Add SARIF or SARIF-like output for GitHub Code Scanning integration.
-- [ ] Add `cargo-deny` interop: ability to consume `deny.toml` policies or produce compatible output.
-- [ ] Add `--diff` mode that compares two lockfiles and reports compatibility changes (useful for PR review).
-- [ ] Investigate `rust-version` field adoption across the crates.io ecosystem to quantify the "unknown" problem and guide users.
-- [ ] Add support for reading `.clippy.toml` or a `.cargo-compatible.toml` config file for project-level defaults.
-- [ ] Add JUnit XML output for CI systems that consume test results.
-- [ ] Consider LSP or editor integration for inline MSRV warnings.
+- [ ] Add `cargo-deny` interop: consume relevant policy ideas or emit compatible output where that helps.
+- [ ] Add `--diff` mode that compares two lockfiles and reports compatibility changes for PR review.
+- [ ] Quantify crates.io `rust-version` coverage to explain how common `unknown` results really are.
+- [ ] Add project-level config support via `.cargo-compatible.toml` for common defaults.
+- [ ] Add JUnit XML output for CI systems that consume test-style artifacts.
+- [ ] Consider editor or LSP integration only if the CLI/report contracts stay clean enough to support it.
 
 Exit criteria:
 
-- [ ] The tool can be dropped into a CI pipeline with a one-liner and fail the build on regressions.
-- [ ] At least one CI output format (SARIF, JUnit, or exit code) is production-ready.
-- [ ] Project-level configuration reduces per-invocation flag noise.
+- [ ] The tool can be dropped into a CI pipeline with a small, well-documented invocation.
+- [ ] At least one machine-oriented output contract beyond JSON is production-ready.
+- [ ] Project-level configuration measurably reduces flag noise for repeat users.
 
 ### Phase 10 - advanced analysis and resolution intelligence
 
-Status: not started
+Status: planned
 
-Goal: make the analysis engine smarter without sacrificing its conservative safety properties.
+Goal: make the analysis engine smarter without violating the core safety contract.
 
-- [ ] Implement feature-aware compatibility analysis (a crate may be compatible when specific features are disabled).
-- [ ] Add `--ignore` flag to exclude specific crates from analysis (known false positives).
-- [ ] Add `--policy` flag for workspace-level MSRV policies ("all members must support 1.70+").
-- [ ] Investigate using `cargo tree` output as an alternative/complement to `cargo metadata` for richer dependency information.
-- [ ] Add transitive dependency pinning suggestions when a lockfile-only fix exists but requires pinning a transitive dep.
-- [ ] Add workspace-aware `rust-version` propagation suggestions (if member A requires 1.75 but depends on member B at 1.70, suggest alignment).
-- [ ] Investigate incremental analysis: if only `Cargo.lock` changed, skip the full metadata reload.
-- [ ] Add `--upgrade-path` mode that shows the minimum set of changes to reach a target Rust version.
-- [ ] Consider `--simulate` mode that predicts the effect of a Rust version bump without actually running `cargo update`.
+Work to do:
+
+- [ ] Implement feature-aware compatibility analysis where disabled features materially change compatibility.
+- [ ] Add `--ignore` support for intentionally excluded crates or known false positives.
+- [ ] Add workspace-level policy modes such as "all members must support 1.70+".
+- [ ] Investigate whether `cargo tree` can complement `cargo metadata` for richer dependency reasoning.
+- [ ] Add transitive pinning suggestions when a lockfile-only fix exists but needs explicit constraints.
+- [ ] Add workspace-aware `rust-version` alignment suggestions across members.
+- [ ] Investigate incremental analysis when only `Cargo.lock` changes.
+- [ ] Add an `--upgrade-path` mode that shows the minimum set of changes to reach a target Rust version.
+- [ ] Consider a `--simulate` mode that predicts the effect of a Rust version bump without rewriting files.
 
 Exit criteria:
 
-- [ ] Feature-aware analysis reduces false positives by a measurable amount on real workspaces.
-- [ ] At least one "smart suggestion" mode goes beyond the current conservative direct-dependency-only approach.
-- [ ] All new analysis modes maintain the safety invariant (never silently mutate, never fabricate certainty).
+- [ ] Feature-aware analysis reduces false positives measurably on real workspaces.
+- [ ] At least one suggestion mode goes beyond current direct-dependency conservatism without becoming speculative.
+- [ ] All advanced modes preserve the non-mutating-by-default safety model.
 
 ### Phase 11 - documentation, examples, and onboarding
 
-Status: not started
+Status: planned
 
-Goal: make the tool accessible to users who are not Cargo internals experts.
+Goal: make the tool understandable to Rust developers who are not Cargo internals specialists.
 
-- [ ] Write a user guide (mdbook or standalone markdown) covering common workflows end-to-end.
-- [ ] Add annotated example outputs for each command showing what each section means.
-- [ ] Add a "troubleshooting" section covering common failure modes and their resolutions.
-- [ ] Add a "concepts" page explaining MSRV, `rust-version`, resolver behavior, and why lockfile-first matters.
-- [ ] Create example fixtures that users can clone and run the tool against for learning.
+Work to do:
+
+- [ ] Write a user guide (mdbook or standalone markdown) covering common workflows end to end.
+- [ ] Add annotated example outputs for each command.
+- [ ] Add a troubleshooting section covering common failure modes and likely fixes.
+- [ ] Add a concepts page explaining MSRV, `rust-version`, resolver behavior, and why lockfile-first matters.
+- [ ] Create cloneable learning fixtures or example repos that users can run locally.
 - [ ] Add `man` page generation from clap metadata.
-- [ ] Document the JSON output schema formally (JSON Schema or similar).
-- [ ] Add a "migration guide" for users coming from `cargo-msrv` or manual MSRV management.
-- [ ] Consider a `cargo compatible init` command that scaffolds `.cargo-compatible.toml` with sane defaults.
+- [ ] Publish the JSON output schema formally if Phase 7 decides it is stable enough.
+- [ ] Add a migration guide for users coming from `cargo-msrv` or manual MSRV workflows.
+- [ ] Consider a `cargo compatible init` command only if a config file format first proves worthwhile.
 
 Exit criteria:
 
-- [ ] A Rust developer unfamiliar with MSRV tooling can go from zero to productive in under 10 minutes.
-- [ ] JSON schema is published and versioned.
-- [ ] At least one comparison document positions `cargo-compatible` against alternatives.
+- [ ] A Rust developer unfamiliar with MSRV tooling can get productive quickly without reading the source.
+- [ ] Example outputs and schema docs match the real CLI output.
+- [ ] At least one comparison doc explains where `cargo-compatible` fits relative to alternatives.
 
 ### Phase 12 - community readiness and 1.0 roadmap
 
-Status: not started
+Status: planned
 
-Goal: establish the project as a credible, maintained, community-ready tool that users and organizations can depend on.
+Goal: establish the project as a credible, maintained tool with a clear path to a durable 1.0 contract.
 
-- [ ] Define and document the stability contract for 1.0 (what is SemVer-stable, what is not).
+Work to do:
+
+- [ ] Define and document the stability contract for 1.0 (what is SemVer-stable and what is not).
 - [ ] Establish a deprecation policy for CLI flags and output schema changes.
 - [ ] Set up issue templates and PR templates on GitHub.
-- [ ] Add a security policy (`SECURITY.md`) with responsible disclosure process.
-- [ ] Evaluate whether the crate should expose a library API or remain CLI-only.
-- [ ] Plan and execute outreach: blog post, Rust users forum announcement, r/rust post.
-- [ ] Investigate integration with `cargo` itself (RFC or pre-RFC for MSRV-aware resolution).
-- [ ] Add usage telemetry opt-in for understanding real-world usage patterns (privacy-first, disabled by default).
-- [ ] Consider organizational sponsorship or Rust Foundation alignment.
-- [ ] Define the 1.0 feature gate: what must be done before the major version bump.
-- [ ] Establish a release cadence (monthly? per-milestone? ad hoc?).
+- [x] Add a security policy (`SECURITY.md`) with a responsible disclosure process.
+- [ ] Decide whether the crate should expose a library API or remain CLI-only through 1.0.
+- [ ] Plan and execute early outreach: blog post, forum post, release announcement, or equivalent.
+- [ ] Investigate whether deeper Cargo integration (RFC / pre-RFC) is worth pursuing after the CLI stabilizes.
+- [ ] Consider privacy-first opt-in telemetry only if there is a concrete product question it would answer.
+- [ ] Define the 1.0 feature gate and release cadence explicitly.
 
 Exit criteria:
 
-- [ ] The project has a clear, public 1.0 roadmap.
-- [ ] Security and stability contracts are documented.
-- [ ] The project is positioned for community contribution and long-term maintenance.
+- [ ] The project has a public 1.0 roadmap with explicit scope boundaries.
+- [ ] Security and stability contracts are documented rather than implied.
+- [ ] The repo is positioned for outside contribution without maintainers having to explain everything ad hoc.
 
 ---
 
@@ -564,44 +553,48 @@ These commands are documented in this repository as actually run during the Marc
 
 ## Open questions
 
-These questions need answers before or during the indicated phase:
+These are the live judgment calls that shape the next few phases:
 
 | Question | Phase | Impact |
 |----------|-------|--------|
-| How far should `explain` query matching go beyond exact package ID, name, or `name@version`? | 4 | Edge-case UX for ambiguous queries |
-| How source-aware should resolve/explain reporting become for same-name multi-source crates? | 4–5 | Human-facing output clarity |
-| Should mixed-workspace resolver guidance remain explanatory only for v0.1? | 7 | Scope of edit automation |
+| What benchmark corpus best approximates real operator pain without making the suite flaky or network-dependent? | 6 | Performance claims and optimization targets |
+| Is temp-workspace copy time a release blocker in practice, or only an aesthetic concern until larger repos are measured? | 6 | Whether optimization work should preempt polish |
+| Should JSON output be versioned in v0.2, or explicitly labeled unstable until more CI-facing features land? | 7 | Downstream contract and release messaging |
+| How much package-identity disambiguation is enough before always showing source labels by default? | 7 | Human-report readability vs verbosity |
+| Should v0.2 ship as crate-only, or does it need binary artifacts on day one to feel credible? | 8 | Release automation scope |
+| What is the right exit-code contract for CI usage? (0/1/2? configurable?) | 9 | CI integration contract |
+| Should config file support land before or after CI-oriented outputs like SARIF/JUnit? | 9 | Feature ordering and adoption |
 | Should the tool expose a library API or stay CLI-only through 1.0? | 12 | API surface commitment |
-| What is the right exit-code contract for CI usage? (0/1/2?) | 9 | CI integration contract |
-| Should config file support land before or after JSON schema stabilization? | 9 | Feature ordering |
-| How should the tool handle `rust-version` ranges if/when Cargo supports them? | 10 | Forward compatibility |
+| How should the tool handle `rust-version` ranges if Cargo eventually supports them? | 10 | Forward compatibility |
 
 ---
 
 ## Risk register
 
-- Some human-facing resolve and explain summaries still do not fully disambiguate same-name crates across all multi-source or same-version cases; package IDs remain the escape hatch.
-- The resolution command now uses `cargo update` (without `--workspace`) to allow dependency upgrading; this is a deliberate strategy change from the original conservative `--workspace` approach; the lockfile-improvement fixture validates this behavior end-to-end.
-- The temp-copy resolution model is intentionally safe, but it may become a performance pain point on larger real-world workspaces if it is not measured carefully.
+- Some human-facing resolve and explain summaries still do not fully disambiguate same-name crates across all multi-source or same-version cases; package IDs remain the conservative fallback.
+- The resolution command now uses `cargo update` (without `--workspace`) to allow dependency upgrading; that is the right behavior for the lockfile-improvement workflow, but it is a deliberate semantic choice that should stay well-tested.
+- The temp-copy resolution model is intentionally safe, but it may become a real adoption drag on larger workspaces if Phase 6 measurements go badly.
 - Manifest suggestion quality depends on local sparse-index or local-registry metadata availability and intentionally does not reimplement full Cargo feature resolution.
-- The current benchmark is useful but synthetic; it does not yet prove behavior on registry-heavy or feature-heavy repositories.
-- The JSON output schema is not yet formally versioned; downstream consumers risk breakage on shape changes.
-- MSRV is declared as 1.74 in Cargo.toml and enforced in CI; any dependency bump that silently raises the floor would still only be caught on the MSRV CI job, not locally.
-- Windows compatibility is untested; path handling and temp-workspace logic may have platform-specific bugs.
-- The `crates-index` dependency pins to a specific sparse-index protocol version; future crates.io changes could break lookups silently.
+- The current benchmark coverage is still too synthetic to justify strong performance claims on registry-heavy or feature-heavy repositories.
+- The JSON output schema is not yet formally versioned; downstream consumers still risk breakage on shape changes.
+- MSRV is declared as 1.74 and enforced in CI, but a local developer can still miss an MSRV regression until CI runs.
+- Windows now runs in CI, but there is still little Windows-specific write-path or temp-path diagnostic coverage beyond the generic test matrix.
+- The `crates-index` dependency pins to a specific sparse-index protocol version; future crates.io changes could break lookups in ways that look like user error.
+- If Phase 7 expands docs/examples faster than Phase 6 produces measurements, the repo could accidentally overstate readiness again.
 
 ---
 
 ## Immediate next moves
 
-1. Begin Phase 6: expand benchmarks beyond the current synthetic workspace to measure real-world performance characteristics.
-2. Begin Phase 7: release polish pass — refresh README.md, CHANGELOG.md, verify CLI examples, tighten error messages.
-3. Plan the v0.2 release scope and timeline.
+1. Kick off Phase 6 by adding one fixture-derived benchmark and by separating metadata, analysis, copy, and resolver timings.
+2. Start the Phase 7 trust pass with a README/help/example audit once the first Phase 6 baseline numbers exist.
+3. Decide whether v0.2 is primarily a "measured core" release, a "CI integration" release, or a hybrid — then cut scope accordingly.
 
 ---
 
 ## Progress log
 
+- 2026-03-24: Reframed `BUILD.md` as a live execution manual for the post-hardening stretch, shifting the top-line narrative from "Phases 4–5 complete" to a concrete Phase 6–8 kickoff with measurable next work, updated open questions and risks to reflect the actual remaining decisions, and tightened README/AGENTS status wording so the repo no longer reads like a finished-correctness snapshot. Verified with: `rg -n "Current execution window|Phase 6|Phase 7|Status:" BUILD.md README.md AGENTS.md`, `git diff --check`. Next: start Phase 6 with fixture-derived benchmarks and baseline capture.
 - 2026-03-22: Completed Phases 4 and 5. Phase 4: threaded workspace root through `ExplainReport` so `render_explain_human` and `render_explain_markdown` use the actual workspace root instead of `Path::new(".")` for path-relative package labels; confirmed dependency-path chain labels are already properly disambiguated via `colliding_base_labels` + `unique_package_label` in `shortest_paths_from_root`. Phase 5: added `lockfile-improvement` fixture with a 3-version local registry (1.1.0 compatible, 1.2.0 incompatible, 1.3.0 compatible); fixed `run_resolution_command` to use `cargo update` without `--workspace` so dependencies actually get updated to newer compatible versions; added integration tests verifying scan reports 1.2.0 as incompatible and resolve upgrades 1.2.0 → 1.3.0 with non-empty `improved_packages` and empty `remaining_blockers`. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (50 tests pass), `cargo nextest run` (50 tests pass). All snapshots unchanged.
 - 2026-03-22: Closed out Phases 4 and 5. Threaded workspace root through `ExplainReport` so explain rendering uses workspace-relative path labels instead of `Path::new(".")`. Fixed `run_resolution_command` to use `cargo update` without `--workspace` — the `--workspace` flag limited updates to workspace member entries only, preventing dependency upgrades in the temp-copy resolution flow. Added a `lockfile-improvement` fixture with a local registry containing three versions of `compat-demo` (1.1.0 compatible, 1.2.0 incompatible, 1.3.0 compatible) to exercise the true lockfile-only improvement path end to end. Refactored `stage_local_registry_fixture` into a reusable `stage_local_registry_fixture_with_packages` helper. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (50 tests pass), `cargo nextest run` (50 pass), `~/.cargo/bin/cargo-deny check`, `cargo bench --bench large_workspace_resolver --no-run`. Next: begin Phase 6 (benchmark expansion) and Phase 7 (release polish).
 - 2026-03-22: Added MSRV badge to README, unit tests for `classify_package`/`strongest_status`/`parse_version_display`, integration tests for `apply-lock` no-op, `scan` incompatible reporting (human and JSON), `explain` JSON blocker classification, and `resolve --write-report` with JSON format. Improved panic message in `parse_version_display` to include the invalid value. Corrected BUILD.md risk register to reflect that MSRV is declared and enforced in CI (1.74 job + cross-platform matrix + dogfood gate already present). Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (48 tests pass). Next: continue identity-disambiguation and lockfile-improvement work.

@@ -91,7 +91,7 @@ cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.
 ## Current Gaps
 
 - `resolve` currently relies on stable Cargo commands in a full temp copy of the workspace, which is safe but can be slower on larger repos.
-- A true lockfile-only downgrade/improvement scenario is currently blocked by Cargo invocation strategy: stable `cargo update --workspace` preserves valid existing lockfile selections instead of downgrading them to the latest Rust-compatible version.
+- The repo now has a deterministic local-registry fixture for a true lockfile-only improvement path, but broader performance evidence around temp-workspace resolution is still missing.
 - Manifest suggestion logic is strongest for normal direct crates.io dependencies and currently relies on locally available sparse-index or local-registry metadata.
 - Feature validation is conservative and not a complete reimplementation of Cargo feature resolution semantics.
 - Mixed-workspace reasoning is explanatory rather than prescriptive; this version does not auto-edit `workspace.resolver = "3"`.
