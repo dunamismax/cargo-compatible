@@ -71,7 +71,7 @@ cli.rs → lib.rs → metadata.rs → compat.rs ─┐
 - `explain` only succeeds for packages reachable from the selected dependency graph; out-of-scope queries should fail clearly.
 - Path and git dependencies are analyzed and explained, but they do not receive bogus crates.io downgrade suggestions.
 - `cargo-deny` currently passes with duplicate-version warnings from transitive dependencies; CI treats them as warnings, not failures.
-- MSRV is declared as 1.74 in `Cargo.toml` and verified in CI.
+- MSRV is declared as 1.89 in `Cargo.toml` and verified in CI.
 
 ## Verified Commands
 

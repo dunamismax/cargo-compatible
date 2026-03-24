@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `proptest` invariants for semver candidate selection and resolution diff behavior.
 - Criterion benchmark for large synthetic workspaces that exercises `build_candidate_resolution`.
 - Cross-platform CI matrix (Linux, macOS, Windows).
-- MSRV verification in CI (Rust 1.74).
+- MSRV verification in CI (Rust 1.89).
 - Dogfood CI job that runs the tool against its own workspace.
 - Release workflow with binary builds for 5 targets and crates.io publish.
 - `CONTRIBUTING.md` with development setup, coding standards, and PR process.
@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hardened package identity handling by avoiding collapsed multi-version resolve diffs for the same package identity and by matching manifest suggestions on package name plus source instead of name alone.
 - Extended package-identity disambiguation into dependency-path chains, stabilized resolve diff identities across temp-workspace copies for same-name path/source cases.
 - Switched CI test execution to `cargo-nextest`.
-- Declared MSRV of 1.74 in `Cargo.toml`.
+- Declared MSRV of 1.89 in `Cargo.toml`.
 
 ### Fixed
 

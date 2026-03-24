@@ -85,9 +85,9 @@ fn stage_git_dependency_fixture() -> GitDependencyFixture {
     fs::write(
         workspace_root.join("Cargo.toml"),
         format!(
-            "[package]\nname = \"git-identity-chains\"\nversion = \"0.1.0\"\nedition = \"2021\"\nrust-version = \"1.60\"\n\n[dependencies]\nshared_a = {{ package = \"shared\", git = \"file://{}\" }}\nshared_b = {{ package = \"shared\", git = \"file://{}\" }}\n",
-            repo_a.display(),
-            repo_b.display(),
+            "[package]\nname = \"git-identity-chains\"\nversion = \"0.1.0\"\nedition = \"2021\"\nrust-version = \"1.60\"\n\n[dependencies]\nshared_a = {{ package = \"shared\", git = \"{}\" }}\nshared_b = {{ package = \"shared\", git = \"{}\" }}\n",
+            file_uri(&repo_a),
+            file_uri(&repo_b),
         ),
     )
     .unwrap();
@@ -167,7 +167,7 @@ fn build_local_registry(registry_root: &Path, packages: &[LocalRegistryPackage])
     fs::create_dir_all(registry_root.join("index").join("co").join("mp")).unwrap();
     fs::write(
         registry_root.join("index").join("config.json"),
-        format!(r#"{{"dl":"file://{}"}}"#, registry_root.display()),
+        format!(r#"{{"dl":"{}"}}"#, file_uri(registry_root)),
     )
     .unwrap();
 
@@ -258,7 +258,7 @@ fn write_local_registry_config(workspace_root: &Path, registry_root: &Path) {
         cargo_dir.join("config.toml"),
         format!(
             "[source.crates-io]\nreplace-with = \"local\"\n\n[source.local]\nlocal-registry = \"{}\"\n\n[net]\noffline = true\n",
-            registry_root.display()
+            path_string(registry_root)
         ),
     )
     .unwrap();
@@ -290,17 +290,47 @@ fn write_basic_workspace(root: &Path, lockfile_contents: &str) {
     fs::write(root.join("Cargo.lock"), lockfile_contents).unwrap();
 }
 
+fn path_string(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn file_uri(path: &Path) -> String {
+    let normalized = path_string(path);
+    if normalized.starts_with('/') {
+        format!("file://{normalized}")
+    } else {
+        format!("file:///{normalized}")
+    }
+}
+
+fn package_id_prefix(path: &Path) -> String {
+    let normalized = path_string(path);
+    if normalized.starts_with('/') {
+        format!("path+file://{normalized}")
+    } else {
+        format!("path+file:///{normalized}")
+    }
+}
+
+fn replace_path_variants(text: &str, path: &Path, placeholder: &str) -> String {
+    text.replace("\r\n", "\n")
+        .replace(&package_id_prefix(path), &format!("path+file://{placeholder}"))
+        .replace(&file_uri(path), &format!("file://{placeholder}"))
+        .replace(&path.display().to_string(), placeholder)
+        .replace(&path_string(path), placeholder)
+}
+
 fn sanitize_text(text: &str, fixture_root: &Path) -> String {
-    text.replace(&fixture_root.display().to_string(), "$FIXTURE")
-        .replace(env!("CARGO_MANIFEST_DIR"), "$REPO")
+    let text = replace_path_variants(text, fixture_root, "$FIXTURE");
+    replace_path_variants(text.as_str(), Path::new(env!("CARGO_MANIFEST_DIR")), "$REPO")
 }
 
 fn sanitize_json(value: &mut Value, fixture_root: &Path) {
     match value {
         Value::String(string) => {
-            *string = string
-                .replace(&fixture_root.display().to_string(), "$FIXTURE")
-                .replace(env!("CARGO_MANIFEST_DIR"), "$REPO");
+            *string = replace_path_variants(string, fixture_root, "$FIXTURE");
+            *string =
+                replace_path_variants(string, Path::new(env!("CARGO_MANIFEST_DIR")), "$REPO");
         }
         Value::Array(items) => {
             for item in items {
@@ -316,19 +346,19 @@ fn sanitize_json(value: &mut Value, fixture_root: &Path) {
     }
 }
 
-fn replace_json_strings(value: &mut Value, from: &str, to: &str) {
+fn replace_json_path_variants(value: &mut Value, path: &Path, placeholder: &str) {
     match value {
         Value::String(string) => {
-            *string = string.replace(from, to);
+            *string = replace_path_variants(string, path, placeholder);
         }
         Value::Array(items) => {
             for item in items {
-                replace_json_strings(item, from, to);
+                replace_json_path_variants(item, path, placeholder);
             }
         }
         Value::Object(map) => {
             for value in map.values_mut() {
-                replace_json_strings(value, from, to);
+                replace_json_path_variants(value, path, placeholder);
             }
         }
         Value::Null | Value::Bool(_) | Value::Number(_) => {}
@@ -707,12 +737,7 @@ fn resolve_virtual_workspace_json_snapshot() {
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
     {
-        replace_json_strings(&mut value, &temp_root, "$TEMP_WORKSPACE");
-        replace_json_strings(
-            &mut value,
-            &format!("path+file://{temp_root}"),
-            "path+file://$TEMP_WORKSPACE",
-        );
+        replace_json_path_variants(&mut value, Path::new(&temp_root), "$TEMP_WORKSPACE");
     }
     assert_json_snapshot!("resolve_virtual_workspace_json", value);
 }

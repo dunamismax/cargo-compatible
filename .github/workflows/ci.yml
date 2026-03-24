@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: cargo-compatible-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
@@ -63,16 +70,16 @@ jobs:
         run: cargo test --doc
 
   msrv:
-    name: MSRV (1.74)
+    name: MSRV (1.89)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.74"
+          toolchain: "1.89"
       - uses: Swatinem/rust-cache@v2
       - name: cargo check
-        run: cargo check --all-features
+        run: cargo check --all-features --locked
 
   deny:
     name: Dependency policy
