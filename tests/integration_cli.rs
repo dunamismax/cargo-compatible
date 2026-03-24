@@ -313,14 +313,24 @@ fn package_id_prefix(path: &Path) -> String {
 }
 
 fn replace_path_variants(text: &str, path: &Path, placeholder: &str) -> String {
-    text.replace("\r\n", "\n")
-        .replace(
-            &package_id_prefix(path),
-            &format!("path+file://{placeholder}"),
-        )
-        .replace(&file_uri(path), &format!("file://{placeholder}"))
-        .replace(&path.display().to_string(), placeholder)
-        .replace(&path_string(path), placeholder)
+    normalize_placeholder_paths(
+        text.replace("\r\n", "\n")
+            .replace(
+                &package_id_prefix(path),
+                &format!("path+file://{placeholder}"),
+            )
+            .replace(&file_uri(path), &format!("file://{placeholder}"))
+            .replace(&path.display().to_string(), placeholder)
+            .replace(&path_string(path), placeholder),
+    )
+}
+
+fn normalize_placeholder_paths(text: String) -> String {
+    if text.contains("$FIXTURE") || text.contains("$REPO") {
+        text.replace('\\', "/")
+    } else {
+        text
+    }
 }
 
 fn sanitize_text(text: &str, fixture_root: &Path) -> String {
@@ -390,6 +400,15 @@ fn scan_missing_rust_version_json_snapshot() {
     let mut value: Value = serde_json::from_slice(&output).unwrap();
     sanitize_json(&mut value, &fixture_root);
     assert_json_snapshot!("scan_missing_rust_version_json", value);
+}
+
+#[test]
+fn replace_path_variants_normalizes_placeholder_backslashes() {
+    let fixture_root = fixture("missing-rust-version");
+    let input = format!("{}\\helper\\Cargo.toml", fixture_root.display());
+    let output = replace_path_variants(&input, &fixture_root, "$FIXTURE");
+
+    assert_eq!(output, "$FIXTURE/helper/Cargo.toml");
 }
 
 #[test]
