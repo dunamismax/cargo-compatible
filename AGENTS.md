@@ -90,12 +90,11 @@ cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.
 
 ## Current Gaps
 
-- `resolve` currently relies on stable Cargo commands in a full temp copy of the workspace, which is safe but can be slower on larger repos.
-- The repo now has a deterministic local-registry fixture for a true lockfile-only improvement path, but broader performance evidence around temp-workspace resolution is still missing.
+- `resolve` relies on stable Cargo commands in a full temp copy of the workspace; Phase 6 benchmarks confirm temp-workspace copy accounts for ~20–25% of resolve time, which is acceptable at current scale (up to 96 members measured).
 - Manifest suggestion logic is strongest for normal direct crates.io dependencies and currently relies on locally available sparse-index or local-registry metadata.
 - Feature validation is conservative and not a complete reimplementation of Cargo feature resolution semantics.
 - Mixed-workspace reasoning is explanatory rather than prescriptive; this version does not auto-edit `workspace.resolver = "3"`.
-- The Criterion benchmark is intentionally synthetic and path-only; it tracks large-workspace resolver overhead without exercising networked registry traffic.
+- The Criterion benchmark harness now covers seven groups (resolve, scan, metadata load, temp-workspace copy, dense graph, mixed version, fixture-derived), but still lacks a registry-backed corpus with real crates.io dependencies.
 - JSON output schema is not yet formally versioned or documented.
 
 ## Working Agreement
