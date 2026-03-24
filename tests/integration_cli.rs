@@ -314,7 +314,10 @@ fn package_id_prefix(path: &Path) -> String {
 
 fn replace_path_variants(text: &str, path: &Path, placeholder: &str) -> String {
     text.replace("\r\n", "\n")
-        .replace(&package_id_prefix(path), &format!("path+file://{placeholder}"))
+        .replace(
+            &package_id_prefix(path),
+            &format!("path+file://{placeholder}"),
+        )
         .replace(&file_uri(path), &format!("file://{placeholder}"))
         .replace(&path.display().to_string(), placeholder)
         .replace(&path_string(path), placeholder)
@@ -322,15 +325,18 @@ fn replace_path_variants(text: &str, path: &Path, placeholder: &str) -> String {
 
 fn sanitize_text(text: &str, fixture_root: &Path) -> String {
     let text = replace_path_variants(text, fixture_root, "$FIXTURE");
-    replace_path_variants(text.as_str(), Path::new(env!("CARGO_MANIFEST_DIR")), "$REPO")
+    replace_path_variants(
+        text.as_str(),
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        "$REPO",
+    )
 }
 
 fn sanitize_json(value: &mut Value, fixture_root: &Path) {
     match value {
         Value::String(string) => {
             *string = replace_path_variants(string, fixture_root, "$FIXTURE");
-            *string =
-                replace_path_variants(string, Path::new(env!("CARGO_MANIFEST_DIR")), "$REPO");
+            *string = replace_path_variants(string, Path::new(env!("CARGO_MANIFEST_DIR")), "$REPO");
         }
         Value::Array(items) => {
             for item in items {
