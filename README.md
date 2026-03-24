@@ -1,10 +1,6 @@
 # cargo-compatible
 
-[![CI](https://github.com/dunamismax/cargo-compatible/actions/workflows/ci.yml/badge.svg)](https://github.com/dunamismax/cargo-compatible/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/cargo-compatible.svg)](https://crates.io/crates/cargo-compatible)
-[![docs.rs](https://docs.rs/cargo-compatible/badge.svg)](https://docs.rs/cargo-compatible)
-[![MSRV](https://img.shields.io/badge/MSRV-1.89-blue.svg)](https://github.com/dunamismax/cargo-compatible/blob/main/Cargo.toml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/dunamismax/cargo-compatible/actions/workflows/ci.yml/badge.svg)](https://github.com/dunamismax/cargo-compatible/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/cargo-compatible.svg)](https://crates.io/crates/cargo-compatible) [![docs.rs](https://docs.rs/cargo-compatible/badge.svg)](https://docs.rs/cargo-compatible) [![MSRV](https://img.shields.io/badge/MSRV-1.89-blue.svg)](https://github.com/dunamismax/cargo-compatible/blob/main/Cargo.toml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Audit your workspace's dependency graph against any Rust version. Fix what's blocking, safely.**
 
