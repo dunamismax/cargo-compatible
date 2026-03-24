@@ -10,7 +10,7 @@
 
 `cargo-compatible` is a Cargo subcommand that answers "does my resolved dependency graph fit the Rust version I care about?" It scans your lockfile, classifies every package as compatible, incompatible, or unknown, and offers a safe, incremental path to fix blockers — lockfile changes first, manifest edits only when necessary.
 
-> **Status: v0.1 core implemented; post-hardening work is active.** The core command surface (`scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`) is implemented and published on crates.io. Current work is shifting into performance realism, release polish, and operator trust for v0.2. See [BUILD.md](BUILD.md) for the full execution plan.
+> **Status:** v0.1 core is implemented and published on crates.io. The command surface (`scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`) ships today, and the active work is performance realism, release polish, and operator trust for v0.2. See [BUILD.md](BUILD.md) for the full execution plan.
 
 ## Why cargo-compatible?
 
@@ -177,7 +177,7 @@ All commands support `--format {human|json|markdown}`:
 - **Explain** — assembles per-package reasoning with blocker classification and dependency-path context
 - **Identity + Report** — renders results in human, JSON, or Markdown form with source-aware labeling
 
-## Repository layout
+## Repository Layout
 
 ```text
 .
@@ -259,7 +259,7 @@ See [BUILD.md](BUILD.md) for the full phase breakdown with goals, exit criteria,
 6. **Local-first.** All analysis uses locally available metadata. No network calls, no accounts, no cloud dependencies in the core path.
 7. **Truthful status.** Docs, CLI output, and code must agree. If they don't, the next change reconciles all three.
 
-## Development
+## Development And Verification
 
 ```bash
 cargo fmt --check
