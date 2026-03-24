@@ -94,7 +94,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Check crates.io publication state
+        id: crate-state
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json, sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          if curl --fail --silent --show-error "https://crates.io/api/v1/crates/cargo-compatible/${version}" >/dev/null; then
+            echo "already_published=true" >>"$GITHUB_OUTPUT"
+            echo "version=${version}" >>"$GITHUB_OUTPUT"
+            echo "cargo-compatible ${version} is already published; skipping cargo publish."
+          else
+            echo "already_published=false" >>"$GITHUB_OUTPUT"
+            echo "version=${version}" >>"$GITHUB_OUTPUT"
+          fi
       - name: Publish
+        if: steps.crate-state.outputs.already_published != 'true'
         run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
