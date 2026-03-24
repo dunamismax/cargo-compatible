@@ -6,7 +6,7 @@
 
 `cargo-compatible` is a Cargo subcommand that answers "does my resolved dependency graph fit the Rust version I care about?" It scans your lockfile, classifies every package as compatible, incompatible, or unknown, and offers a safe, incremental path to fix blockers — lockfile changes first, manifest edits only when necessary.
 
-> **Status:** v0.1 core is implemented and published on crates.io. The command surface (`scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`) ships today, and the active work is performance realism, release polish, and operator trust for v0.2. See [BUILD.md](BUILD.md) for the full execution plan.
+> **Status:** v0.2.0 is published on crates.io. The full command surface (`scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`) ships today with correctness hardening, write-path coverage, measured performance baselines, and CI with cross-platform, MSRV, and dogfood gates. The active work is release polish and operator trust (Phase 7). See [BUILD.md](BUILD.md) for the full execution plan.
 
 ## Why cargo-compatible?
 
@@ -235,8 +235,8 @@ All commands support `--format {human|json|markdown}`:
 | 3 | Reporting, fixtures, CI, and benchmark baseline | **Done** |
 | 4 | Correctness hardening (selection, explain, report) | **Done** |
 | 5 | Write-path and mutating-flow coverage | **Done** |
-| 6 | Performance realism and benchmark expansion | **Next** |
-| 7 | Release polish and operator trust cleanup | Planned |
+| 6 | Performance realism and benchmark expansion | **Done** |
+| 7 | Release polish and operator trust cleanup | **Next** |
 | 8 | CI/CD hardening and release automation | Planned |
 | 9 | Ecosystem integration and interoperability | Planned |
 | 10 | Advanced analysis and resolution intelligence | Planned |
