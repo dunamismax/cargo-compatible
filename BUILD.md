@@ -578,6 +578,29 @@ Exit criteria:
 - [ ] Security and stability contracts are documented rather than implied.
 - [ ] The repo is positioned for outside contribution without maintainers having to explain everything ad hoc.
 
+### Phase 13 - supply-chain trust extensions
+
+Status: planned
+
+Goal: extend compatibility analysis with supply-chain trust signals. cargo-compatible already knows your dependency graph — the natural next step is assessing whether those dependencies are trustworthy, not just version-compatible.
+
+Work to do:
+
+- [ ] Add SBOM generation from the resolved dependency graph (SPDX or CycloneDX format).
+- [ ] Add provenance attestation checks: verify whether dependencies publish sigstore or in-toto attestations.
+- [ ] Add dependency trust scoring: composite signal from audit status (`cargo-audit`/`cargo-deny` overlap), maintainer activity, download trends, and attestation coverage.
+- [ ] Add a `cargo compatible trust` subcommand that reports supply-chain health alongside compatibility.
+- [ ] Add `--sbom` flag on `scan` and `resolve` to emit SBOM as a side output.
+- [ ] Decide whether trust scoring belongs in human/JSON/Markdown output or a separate report format.
+- [ ] Add trust policy configuration via `.cargo-compatible.toml` (minimum trust thresholds, required attestation types).
+- [ ] Keep trust assessment conservative: report what can be verified, flag what cannot, do not invent confidence.
+
+Exit criteria:
+
+- [ ] cargo-compatible can generate an SBOM from the resolved graph.
+- [ ] At least one provenance or attestation signal is checked and reported.
+- [ ] Trust assessment is opt-in and does not change the behavior of existing commands.
+
 ---
 
 ## Verification ledger
