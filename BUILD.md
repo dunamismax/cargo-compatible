@@ -51,7 +51,7 @@ What exists today:
 - Fixture-backed integration tests and snapshot coverage
 - CI gate with fmt, clippy, cross-platform nextest/doc tests, MSRV, cargo-deny, dogfood scan, and benchmark compilation
 - Human, JSON, and Markdown output modes
-- Published on crates.io as `cargo-compatible` 0.1.0
+- Published on crates.io as `cargo-compatible` 0.2.0
 
 What Phases 4–5 proved:
 - Package-identity disambiguation is materially better in dependency-path chains and explain reports
@@ -651,6 +651,7 @@ These are the live judgment calls that shape the next few phases:
 
 ## Progress log
 
+- 2026-03-24: Released v0.2.0 and published to crates.io. Version bump, changelog update, git tag v0.2.0, pushed to GitHub and Codeberg, `cargo publish` successful. All quality gates passed: `cargo build`, `cargo test` (51 tests), `cargo clippy`, `cargo fmt --check`.
 - 2026-03-24: Completed Phase 6 — performance realism and benchmark expansion. Expanded `large_workspace_resolver` bench harness from one benchmark group (resolve-only, synthetic linear chain) to seven groups: `resolve_end_to_end`, `scan_analysis`, `metadata_load`, `temp_workspace_copy`, `dense_graph_scan`, `mixed_version_scan`, and `fixture_scan`. Added dense-graph and mixed-version workspace generators. Added fixture-derived scan benchmarks using four real test fixtures. Phase-separated timing proves metadata loading (external `cargo metadata`) dominates resolve cost at 50–76 ms; temp-workspace copy is 18–41 ms (20–25% of resolve); scan analysis itself is 1.5–40 ms depending on scale. No memory pressure observed at 96 members. CI performance thresholds deferred due to ~5–10% benchmark variance at 10-sample level. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (all pass), `cargo bench --bench large_workspace_resolver` (all seven groups complete). Next: Phase 7 — release polish and operator trust cleanup.
 - 2026-03-24: Fixed the active CI failures by making integration fixtures and snapshot sanitization cross-platform, replacing Windows-hostile path serialization in local-registry and git fixture setup, and correcting the repo's declared MSRV from 1.74 to 1.89 to match the current dependency floor (`cargo_metadata 0.22.0`, `cargo-platform 0.3.2`, `home 0.5.12`, and `smol_str 0.3.6` no longer support 1.74). Verified with: `cargo test --locked`, `cargo +1.89.0 check --all-features --locked`, `cargo +1.88.0 check --all-features --locked` (expected failure), `~/go/bin/actionlint .github/workflows/ci.yml`. Next: keep the dependency floor explicit in release notes when upgrading crates that can silently raise MSRV.
 - 2026-03-24: Reframed `BUILD.md` as a live execution manual for the post-hardening stretch, shifting the top-line narrative from "Phases 4–5 complete" to a concrete Phase 6–8 kickoff with measurable next work, updated open questions and risks to reflect the actual remaining decisions, and tightened README/AGENTS status wording so the repo no longer reads like a finished-correctness snapshot. Verified with: `rg -n "Current execution window|Phase 6|Phase 7|Status:" BUILD.md README.md AGENTS.md`, `git diff --check`. Next: start Phase 6 with fixture-derived benchmarks and baseline capture.
