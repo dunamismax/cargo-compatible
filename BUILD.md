@@ -28,7 +28,7 @@ This is a living document. When code and docs disagree, fix them together in the
 
 ---
 
-## Long-Term Vision
+## Long-term vision
 
 `cargo-compatible` aims to become the standard Cargo companion for MSRV management across the Rust ecosystem. The trajectory:
 
@@ -39,38 +39,6 @@ This is a living document. When code and docs disagree, fix them together in the
 5. **v1.0 — Production-grade**: stable CLI contract, SemVer output schema, exhaustive edge-case coverage.
 
 The non-goal boundary is equally important: this tool should never become an alternative package manager, a build system, or a CI orchestrator. It reads Cargo metadata and lockfiles, experiments in sandboxes, and reports findings. It does not own the build.
-
----
-
-## Source-of-truth mapping
-
-| File | Owns |
-|------|------|
-| `README.md` | Public-facing project description, honest status |
-| `BUILD.md` | Implementation map, phase tracking, decisions, verification ledger |
-| `AGENTS.md` | Concise repo memory for future contributors and agents |
-| `CONTRIBUTING.md` | Development setup, coding standards, PR process |
-| `CHANGELOG.md` | User-facing change history (Keep a Changelog format) |
-| `SECURITY.md` | Security policy and responsible disclosure |
-| `Cargo.toml` | Single-crate package definition, dependency manifest |
-| `deny.toml` | Dependency-policy checks |
-| `.github/workflows/ci.yml` | CI gate definition |
-| `src/cli.rs` | Clap command surface, flags, examples |
-| `src/lib.rs` | Command dispatch, orchestration, output routing |
-| `src/metadata.rs` | Package selection, workspace-member matching, target Rust version |
-| `src/compat.rs` | Compatibility analysis, dependency-path reporting |
-| `src/resolution.rs` | Candidate lockfile generation, diffing, apply semantics |
-| `src/temp_workspace.rs` | Temp-copy support for safe resolution |
-| `src/index.rs` | Sparse-index / local-registry lookup, version selection |
-| `src/manifest_edit.rs` | Conservative manifest suggestion and TOML edits |
-| `src/explain.rs` | Per-package explanation and blocker classification |
-| `src/identity.rs` | Package identity labeling and ambiguity handling |
-| `src/report.rs` | Human, JSON, and Markdown rendering |
-| `tests/integration_cli.rs` | Snapshot-backed CLI integration coverage |
-| `tests/version_selection.rs` | Focused selection-rule coverage |
-| `benches/large_workspace_resolver.rs` | Performance benchmark scope |
-
-**Invariant:** If docs, code, and CLI output ever disagree, the next change must reconcile all three.
 
 ---
 
@@ -175,6 +143,38 @@ This repository is past greenfield invention, but it is not in maintenance stasi
 - tighten the operator experience so CLI help, docs, reports, and errors all tell the same story
 - turn the already-good CI foundation into a repeatable release path with artifacts and stronger adoption hooks
 - decide which advanced analysis features actually earn their complexity before v0.2 scope balloons
+
+---
+
+## Source-of-truth mapping
+
+| File | Owns |
+|------|------|
+| `README.md` | Public-facing project description, honest status |
+| `BUILD.md` | Implementation map, phase tracking, decisions, verification ledger |
+| `AGENTS.md` | Concise repo memory for future contributors and agents |
+| `CONTRIBUTING.md` | Development setup, coding standards, PR process |
+| `CHANGELOG.md` | User-facing change history (Keep a Changelog format) |
+| `SECURITY.md` | Security policy and responsible disclosure |
+| `Cargo.toml` | Single-crate package definition, dependency manifest |
+| `deny.toml` | Dependency-policy checks |
+| `.github/workflows/ci.yml` | CI gate definition |
+| `src/cli.rs` | Clap command surface, flags, examples |
+| `src/lib.rs` | Command dispatch, orchestration, output routing |
+| `src/metadata.rs` | Package selection, workspace-member matching, target Rust version |
+| `src/compat.rs` | Compatibility analysis, dependency-path reporting |
+| `src/resolution.rs` | Candidate lockfile generation, diffing, apply semantics |
+| `src/temp_workspace.rs` | Temp-copy support for safe resolution |
+| `src/index.rs` | Sparse-index / local-registry lookup, version selection |
+| `src/manifest_edit.rs` | Conservative manifest suggestion and TOML edits |
+| `src/explain.rs` | Per-package explanation and blocker classification |
+| `src/identity.rs` | Package identity labeling and ambiguity handling |
+| `src/report.rs` | Human, JSON, and Markdown rendering |
+| `tests/integration_cli.rs` | Snapshot-backed CLI integration coverage |
+| `tests/version_selection.rs` | Focused selection-rule coverage |
+| `benches/large_workspace_resolver.rs` | Performance benchmark scope |
+
+**Invariant:** If docs, code, and CLI output ever disagree, the next change must reconcile all three.
 
 ---
 
@@ -524,7 +524,7 @@ Exit criteria:
 
 ---
 
-## Currently verified commands
+## Verification ledger
 
 These commands are documented in this repository as actually run during the March 20-22, 2026 audit and follow-up passes:
 
@@ -551,6 +551,21 @@ These commands are documented in this repository as actually run during the Marc
 
 ---
 
+## Risks
+
+- Some human-facing resolve and explain summaries still do not fully disambiguate same-name crates across all multi-source or same-version cases; package IDs remain the conservative fallback.
+- The resolution command now uses `cargo update` (without `--workspace`) to allow dependency upgrading; that is the right behavior for the lockfile-improvement workflow, but it is a deliberate semantic choice that should stay well-tested.
+- The temp-copy resolution model is intentionally safe, but it may become a real adoption drag on larger workspaces if Phase 6 measurements go badly.
+- Manifest suggestion quality depends on local sparse-index or local-registry metadata availability and intentionally does not reimplement full Cargo feature resolution.
+- The current benchmark coverage is still too synthetic to justify strong performance claims on registry-heavy or feature-heavy repositories.
+- The JSON output schema is not yet formally versioned; downstream consumers still risk breakage on shape changes.
+- MSRV is declared as 1.89 and enforced in CI, but a local developer can still miss an MSRV regression until CI runs.
+- Windows now runs in CI, but there is still little Windows-specific write-path or temp-path diagnostic coverage beyond the generic test matrix.
+- The `crates-index` dependency pins to a specific sparse-index protocol version; future crates.io changes could break lookups in ways that look like user error.
+- If Phase 7 expands docs/examples faster than Phase 6 produces measurements, the repo could accidentally overstate readiness again.
+
+---
+
 ## Open questions
 
 These are the live judgment calls that shape the next few phases:
@@ -566,21 +581,6 @@ These are the live judgment calls that shape the next few phases:
 | Should config file support land before or after CI-oriented outputs like SARIF/JUnit? | 9 | Feature ordering and adoption |
 | Should the tool expose a library API or stay CLI-only through 1.0? | 12 | API surface commitment |
 | How should the tool handle `rust-version` ranges if Cargo eventually supports them? | 10 | Forward compatibility |
-
----
-
-## Risk register
-
-- Some human-facing resolve and explain summaries still do not fully disambiguate same-name crates across all multi-source or same-version cases; package IDs remain the conservative fallback.
-- The resolution command now uses `cargo update` (without `--workspace`) to allow dependency upgrading; that is the right behavior for the lockfile-improvement workflow, but it is a deliberate semantic choice that should stay well-tested.
-- The temp-copy resolution model is intentionally safe, but it may become a real adoption drag on larger workspaces if Phase 6 measurements go badly.
-- Manifest suggestion quality depends on local sparse-index or local-registry metadata availability and intentionally does not reimplement full Cargo feature resolution.
-- The current benchmark coverage is still too synthetic to justify strong performance claims on registry-heavy or feature-heavy repositories.
-- The JSON output schema is not yet formally versioned; downstream consumers still risk breakage on shape changes.
-- MSRV is declared as 1.89 and enforced in CI, but a local developer can still miss an MSRV regression until CI runs.
-- Windows now runs in CI, but there is still little Windows-specific write-path or temp-path diagnostic coverage beyond the generic test matrix.
-- The `crates-index` dependency pins to a specific sparse-index protocol version; future crates.io changes could break lookups in ways that look like user error.
-- If Phase 7 expands docs/examples faster than Phase 6 produces measurements, the repo could accidentally overstate readiness again.
 
 ---
 
