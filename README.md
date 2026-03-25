@@ -4,9 +4,9 @@
 
 **Audit your workspace's dependency graph against any Rust version. Fix what's blocking, safely.**
 
-`cargo-compatible` is a Cargo subcommand that answers "does my resolved dependency graph fit the Rust version I care about?" It scans your lockfile, classifies every package as compatible, incompatible, or unknown, and offers a safe, incremental path to fix blockers — lockfile changes first, manifest edits only when necessary.
+`cargo-compatible` is a Cargo subcommand that answers "does my resolved dependency graph fit the Rust version I care about?" It scans your lockfile, classifies every package as compatible, incompatible, or unknown, and offers a safe, incremental path to fix blockers -- lockfile changes first, manifest edits only when necessary.
 
-> **Status:** v0.2.0 is published on crates.io. The full command surface (`scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`) ships today with correctness hardening, write-path coverage, measured performance baselines, and CI with cross-platform, MSRV, and dogfood gates. The active work is release polish and operator trust (Phase 7). See [BUILD.md](BUILD.md) for the full execution plan.
+> **Status:** v1.0.0 production release. The full command surface (`scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`) ships with correctness hardening, write-path coverage, measured performance baselines, and CI with cross-platform, MSRV, and dogfood gates. See [BUILD.md](BUILD.md) for the full execution plan.
 
 ## Why cargo-compatible?
 
@@ -76,7 +76,7 @@ cargo compatible apply-lock --candidate-lockfile .cargo-compatible/candidate/Car
 
 ### `cargo compatible scan`
 
-Analyze the current workspace state. This is your starting point — it reads the existing lockfile and classifies resolved packages without changing anything.
+Analyze the current workspace state. This is your starting point -- it reads the existing lockfile and classifies resolved packages without changing anything.
 
 ```bash
 cargo compatible scan --workspace
@@ -96,7 +96,7 @@ cargo compatible resolve --workspace --write-report report.md --format markdown
 
 ### `cargo compatible apply-lock`
 
-Apply a previously saved candidate lockfile to the real workspace. Requires an explicit path — no implicit lockfile rewrites.
+Apply a previously saved candidate lockfile to the real workspace. Requires an explicit path -- no implicit lockfile rewrites.
 
 ```bash
 cargo compatible apply-lock --candidate-lockfile .cargo-compatible/candidate/Cargo.lock
@@ -126,8 +126,8 @@ cargo compatible explain "serde@1.0.218"
 This tool is designed to be safe to run in any context:
 
 - **`scan`** never mutates user files
-- **`resolve`** runs in a temp workspace copy by default — your checkout stays untouched
-- **`apply-lock`** requires an explicit candidate lockfile path — no surprise rewrites
+- **`resolve`** runs in a temp workspace copy by default -- your checkout stays untouched
+- **`apply-lock`** requires an explicit candidate lockfile path -- no surprise rewrites
 - **`suggest-manifest`** is dry-run by default; `--write-manifests` stages and validates all edits before persisting
 - **Missing `rust-version`** metadata is treated as unknown, never silently assumed compatible
 - **Path and git dependencies** are analyzed and explained but never receive fabricated crates.io downgrade suggestions
@@ -144,77 +144,77 @@ All commands support `--format {human|json|markdown}`:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│                     cargo compatible CLI                      │
-│          (clap: scan/resolve/apply-lock/suggest/explain)      │
+│           cargo compatible CLI           │
+│     (clap: scan/resolve/apply-lock/suggest/explain)   │
 └──────┬──────────┬──────────┬──────────┬──────────┬───────────┘
-       │          │          │          │          │
-  ┌────▼───┐ ┌───▼────┐ ┌───▼───┐ ┌───▼────┐ ┌───▼─────┐
-  │Metadata│ │ Compat │ │Resolve│ │Manifest│ │ Explain │
-  │        │ │        │ │       │ │  Edit  │ │         │
-  │ cargo  │ │ graph  │ │ temp  │ │ sparse │ │ blocker │
-  │metadata│ │analysis│ │sandbox│ │ index  │ │ paths   │
-  └───┬────┘ └───┬────┘ └───┬───┘ └───┬────┘ └───┬─────┘
-      │          │          │          │          │
-      └──────────┴──────────▼──────────┴──────────┘
-                      ┌──────────┐
-                      │ Identity │
-                      │ + Report │
-                      │          │
-                      │ human    │
-                      │ json     │
-                      │ markdown │
-                      └──────────┘
+    │     │     │     │     │
+ ┌────▼───┐ ┌───▼────┐ ┌───▼───┐ ┌───▼────┐ ┌───▼─────┐
+ │Metadata│ │ Compat │ │Resolve│ │Manifest│ │ Explain │
+ │    │ │    │ │    │ │ Edit │ │     │
+ │ cargo │ │ graph │ │ temp │ │ sparse │ │ blocker │
+ │metadata│ │analysis│ │sandbox│ │ index │ │ paths  │
+ └───┬────┘ └───┬────┘ └───┬───┘ └───┬────┘ └───┬─────┘
+   │     │     │     │     │
+   └──────────┴──────────▼──────────┴──────────┘
+           ┌──────────┐
+           │ Identity │
+           │ + Report │
+           │     │
+           │ human  │
+           │ json   │
+           │ markdown │
+           └──────────┘
 ```
 
-- **Metadata** — runs `cargo metadata`, identifies workspace/package scope, determines target Rust version
-- **Compat** — analyzes the resolved graph, classifies packages, captures dependency paths
-- **Resolve** — creates an isolated temp workspace, generates candidate lockfiles, diffs against current state
-- **Manifest Edit** — inspects sparse-index or local-registry metadata, produces conservative direct-dependency suggestions
-- **Explain** — assembles per-package reasoning with blocker classification and dependency-path context
-- **Identity + Report** — renders results in human, JSON, or Markdown form with source-aware labeling
+- **Metadata** -- runs `cargo metadata`, identifies workspace/package scope, determines target Rust version
+- **Compat** -- analyzes the resolved graph, classifies packages, captures dependency paths
+- **Resolve** -- creates an isolated temp workspace, generates candidate lockfiles, diffs against current state
+- **Manifest Edit** -- inspects sparse-index or local-registry metadata, produces conservative direct-dependency suggestions
+- **Explain** -- assembles per-package reasoning with blocker classification and dependency-path context
+- **Identity + Report** -- renders results in human, JSON, or Markdown form with source-aware labeling
 
 ## Repository Layout
 
 ```text
 .
-├── BUILD.md                          # execution manual, phase tracking, verification ledger
-├── README.md                         # public-facing project description, honest status
-├── AGENTS.md                         # concise repo memory for agents and contributors
-├── CONTRIBUTING.md                   # development setup, coding standards, PR process
-├── CHANGELOG.md                      # user-facing change history
-├── SECURITY.md                       # security policy
-├── LICENSE                           # MIT
-├── Cargo.toml                        # single-crate package definition
-├── Cargo.lock                        # repo lockfile
-├── deny.toml                         # dependency-policy checks
-├── .editorconfig                     # editor consistency settings
+├── BUILD.md             # execution manual, phase tracking, verification ledger
+├── README.md             # public-facing project description, honest status
+├── AGENTS.md             # concise repo memory for agents and contributors
+├── CONTRIBUTING.md          # development setup, coding standards, PR process
+├── CHANGELOG.md           # user-facing change history
+├── SECURITY.md            # security policy
+├── LICENSE              # MIT
+├── Cargo.toml            # single-crate package definition
+├── Cargo.lock            # repo lockfile
+├── deny.toml             # dependency-policy checks
+├── .editorconfig           # editor consistency settings
 ├── .github/
-│   └── workflows/ci.yml              # CI gate
+│  └── workflows/ci.yml       # CI gate
 ├── src/
-│   ├── main.rs                       # binary entrypoint + opt-in tracing
-│   ├── lib.rs                        # command dispatch and orchestration
-│   ├── cli.rs                        # clap command surface and examples
-│   ├── model.rs                      # serializable shared analysis types
-│   ├── metadata.rs                   # cargo metadata loading, scope selection
-│   ├── compat.rs                     # compatibility analysis and dep-path capture
-│   ├── resolution.rs                 # candidate lockfile generation and diffing
-│   ├── temp_workspace.rs             # temp-copy support for safe resolution
-│   ├── index.rs                      # crates.io sparse-index / local-registry lookup
-│   ├── manifest_edit.rs              # conservative manifest suggestion and TOML edits
-│   ├── explain.rs                    # per-package explanation and blocker classification
-│   ├── identity.rs                   # stable package identity labeling
-│   └── report.rs                     # human, JSON, and Markdown rendering
+│  ├── main.rs            # binary entrypoint + opt-in tracing
+│  ├── lib.rs            # command dispatch and orchestration
+│  ├── cli.rs            # clap command surface and examples
+│  ├── model.rs           # serializable shared analysis types
+│  ├── metadata.rs          # cargo metadata loading, scope selection
+│  ├── compat.rs           # compatibility analysis and dep-path capture
+│  ├── resolution.rs         # candidate lockfile generation and diffing
+│  ├── temp_workspace.rs       # temp-copy support for safe resolution
+│  ├── index.rs           # crates.io sparse-index / local-registry lookup
+│  ├── manifest_edit.rs       # conservative manifest suggestion and TOML edits
+│  ├── explain.rs          # per-package explanation and blocker classification
+│  ├── identity.rs          # stable package identity labeling
+│  └── report.rs           # human, JSON, and Markdown rendering
 ├── tests/
-│   ├── integration_cli.rs            # snapshot-backed CLI integration coverage
-│   ├── version_selection.rs          # focused selection-rule coverage
-│   └── fixtures/                     # deterministic sample workspaces
-│       ├── missing-rust-version/
-│       ├── mixed-workspace/
-│       ├── path-too-new/
-│       ├── virtual-workspace/
-│       └── local-registry-manifest-blocker/
+│  ├── integration_cli.rs      # snapshot-backed CLI integration coverage
+│  ├── version_selection.rs     # focused selection-rule coverage
+│  └── fixtures/           # deterministic sample workspaces
+│    ├── missing-rust-version/
+│    ├── mixed-workspace/
+│    ├── path-too-new/
+│    ├── virtual-workspace/
+│    └── local-registry-manifest-blocker/
 └── benches/
-    └── large_workspace_resolver.rs   # Criterion benchmark for synthetic workspace
+  └── large_workspace_resolver.rs  # Criterion benchmark for synthetic workspace
 ```
 
 ## Current limitations
@@ -222,7 +222,7 @@ All commands support `--format {human|json|markdown}`:
 - Manifest suggestions focus on normal direct crates.io dependencies and require locally available sparse-index or local-registry metadata
 - Feature validation does not fully reimplement Cargo feature resolution semantics
 - `resolve` favors correctness and safety over speed (full temp workspace copy)
-- Resolver guidance for mixed or virtual workspaces is explanatory only — no auto-edit of `workspace.resolver`
+- Resolver guidance for mixed or virtual workspaces is explanatory only -- no auto-edit of `workspace.resolver`
 - Path and git dependencies are analyzed but don't receive downgrade suggestions
 
 ## Roadmap
@@ -276,8 +276,8 @@ See [`BUILD.md`](BUILD.md) for the full development manual, phase tracking, and 
 
 ## Contributing
 
-cargo-compatible is actively moving from correctness hardening into performance and release-polish work. Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup, coding standards, and PR guidelines. Design feedback and bug reports are always valuable — open an issue.
+cargo-compatible is actively moving from correctness hardening into performance and release-polish work. Contributions are welcome -- see [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup, coding standards, and PR guidelines. Design feedback and bug reports are always valuable -- open an issue.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT -- see [LICENSE](LICENSE).
