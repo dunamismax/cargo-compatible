@@ -4,7 +4,7 @@
 
 This file is the canonical execution and tracking document for `cargo-compatible`.
 
-It keeps the repo honest while the project turns a proven v0.1 core into a faster, clearer, more adoptable tool. At any point it should answer:
+It keeps the repo honest while the project matures from a proven core into a broader, more adoptable tool. At any point it should answer:
 
 - what cargo-compatible is trying to become
 - what exists right now
@@ -30,13 +30,9 @@ This is a living document. When code and docs disagree, fix them together in the
 
 ## Long-term vision
 
-`cargo-compatible` aims to become the standard Cargo companion for MSRV management across the Rust ecosystem. The trajectory:
+`cargo-compatible` aims to become the standard Cargo companion for MSRV management across the Rust ecosystem.
 
-1. **v0.1 — Correctness foundation** (current): prove the analysis engine is trustworthy on real workspaces.
-2. **v0.2 — Ecosystem integration**: CI-native output, GitHub Actions, `cargo-deny` interop, lockfile-only downgrade.
-3. **v0.3 — Intelligence**: smarter resolution strategies, feature-aware analysis, workspace-level policy.
-4. **v0.4 — Performance**: incremental analysis, caching, parallel resolution.
-5. **v1.0 — Production-grade**: stable CLI contract, SemVer output schema, exhaustive edge-case coverage.
+v1.0.0 is released. The correctness foundation, ecosystem integration baseline, and performance measurement are shipped. The forward trajectory is now about intelligence (feature-aware analysis, workspace-level policy), deeper CI integration, and community adoption.
 
 The non-goal boundary is equally important: this tool should never become an alternative package manager, a build system, or a CI orchestrator. It reads Cargo metadata and lockfiles, experiments in sandboxes, and reports findings. It does not own the build.
 
@@ -44,16 +40,16 @@ The non-goal boundary is equally important: this tool should never become an alt
 
 ## Repo snapshot
 
-**Current execution window: Phase 6 complete, Phase 7 active — measured baselines captured, now polishing the operator-facing surface for a credible v0.2 release path.**
+**Current execution window: v1.0.0 released. Phase 6 complete. Phase 7 (release polish) and Phase 8 (CI/CD hardening) are the next active lanes.**
 
 What exists today:
 - Full command surface: `scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`
 - Fixture-backed integration tests and snapshot coverage
 - CI gate with fmt, clippy, cross-platform nextest/doc tests, MSRV, cargo-deny, dogfood scan, and benchmark compilation
 - Human, JSON, and Markdown output modes
-- Published on crates.io as `cargo-compatible` 0.2.0
+- Published on crates.io as `cargo-compatible` 1.0.0
 
-What Phases 4–5 proved:
+What Phases 4-5 proved:
 - Package-identity disambiguation is materially better in dependency-path chains and explain reports
 - High-risk write paths now have direct coverage instead of hand-wavy confidence
 - The repo has a true lockfile-only improvement fixture backed by a deterministic local registry
@@ -68,7 +64,7 @@ What Phase 6 established:
 
 What is actively being driven next:
 - Operator-trust polish: help text, docs, sample outputs, and error semantics that match the shipped behavior exactly
-- Release automation choices for a credible v0.2 story rather than a forever-0.1 holding pattern
+- CI/CD hardening and release automation for the post-v1 maintenance cadence
 
 What does **not** exist yet:
 - Formal JSON output schema versioning
@@ -143,11 +139,11 @@ The shipped workflow currently supports:
 
 ### Remaining work shape
 
-This repository is past greenfield invention and now has measured performance baselines. The next stretch is about making the tool easier to adopt and harder to misread:
+This repository is past greenfield invention and has shipped v1.0.0 with measured performance baselines. The next stretch is about making the tool easier to adopt and harder to misread:
 
 - tighten the operator experience so CLI help, docs, reports, and errors all tell the same story
 - turn the already-good CI foundation into a repeatable release path with artifacts and stronger adoption hooks
-- decide which advanced analysis features actually earn their complexity before v0.2 scope balloons
+- decide which advanced analysis features actually earn their complexity for future releases
 
 ---
 
@@ -340,7 +336,7 @@ Every dependency addition must be justified in the decisions log with: what it r
 ### Current execution window
 
 - Phase 7 - release polish and operator trust cleanup. Status: **ready**.
-- Phase 8 - CI/CD hardening and release automation. Status: **queued** with meaningful groundwork already **done**.
+- Phase 8 - CI/CD hardening and release automation. Status: **in-progress** (MSRV, cross-platform, dogfood, issue/PR templates, dependabot done; release workflow and binary artifacts remaining).
 
 ### Forward roadmap
 
@@ -423,24 +419,24 @@ Captured on macOS arm64 (Apple Silicon), 2026-03-24. All times are Criterion med
 
 The `large_workspace_resolver` harness now contains seven benchmark groups:
 
-1. `resolve_end_to_end` — full resolution pipeline (original, expanded)
-2. `scan_analysis` — compatibility analysis only, metadata pre-loaded
-3. `metadata_load` — isolated `cargo metadata` invocation cost
-4. `temp_workspace_copy` — isolated filesystem copy cost
-5. `dense_graph_scan` — scan with denser inter-member dependency topology
-6. `mixed_version_scan` — scan with heterogeneous rust-version declarations
-7. `fixture_scan` — scan using real test fixtures (path-too-new, mixed-workspace, missing-rust-version, virtual-workspace)
+1. `resolve_end_to_end` -- full resolution pipeline (original, expanded)
+2. `scan_analysis` -- compatibility analysis only, metadata pre-loaded
+3. `metadata_load` -- isolated `cargo metadata` invocation cost
+4. `temp_workspace_copy` -- isolated filesystem copy cost
+5. `dense_graph_scan` -- scan with denser inter-member dependency topology
+6. `mixed_version_scan` -- scan with heterogeneous rust-version declarations
+7. `fixture_scan` -- scan using real test fixtures (path-too-new, mixed-workspace, missing-rust-version, virtual-workspace)
 
 ### Phase 7 - release polish and operator trust cleanup
 
-Status: queued
+Status: ready
 
 Goal: make the first-run experience sharp enough that the repo reads like a tool people can adopt immediately, not just a promising prototype.
 
 Why this follows Phase 6:
 - Performance claims and examples should not get ahead of the measurements.
 - The docs/help/error pass should describe the real product, not the hoped-for one.
-- This phase is where the public surface gets tightened before broader CI and ecosystem integrations land.
+- This phase is where the public surface gets tightened now that v1.0.0 has shipped.
 
 Work to do:
 
@@ -449,8 +445,8 @@ Work to do:
 - [ ] Add at least one concise end-to-end sample output for `scan`, `resolve`, and `explain` that reflects real snapshots.
 - [ ] Tighten error messages around missing registry metadata, unreachable `explain` targets, and write-path preconditions so users get a next action, not just a failure.
 - [ ] Document when and why package IDs appear as the fallback identity in human-facing output.
-- [ ] Decide whether the JSON schema is versioned in v0.2 or explicitly marked unstable until v0.3.
-- [ ] Decide whether shell completions belong in the v0.2 scope or should wait until the output contract is more settled.
+- [ ] Decide whether the JSON schema is formally versioned in the next release or explicitly marked unstable.
+- [ ] Decide whether shell completions belong in the near-term scope or should wait until the output contract is more settled.
 
 Exit criteria:
 
@@ -460,7 +456,7 @@ Exit criteria:
 
 ### Phase 8 - CI/CD hardening and release automation
 
-Status: planned (foundation partly done)
+Status: in-progress
 
 Goal: turn the repo's current verification discipline into a repeatable, low-drama release path.
 
@@ -469,18 +465,19 @@ Work to do:
 - [x] Add MSRV verification to CI (test against the declared `rust-version` in `Cargo.toml`).
 - [x] Add cross-platform CI matrix (Linux, macOS, Windows).
 - [x] Add CI job that runs the tool against its own workspace as a dogfood gate.
+- [x] Set up issue templates and PR templates on GitHub.
+- [x] Add dependabot for regular dependency update pressure.
 - [ ] Add a release workflow that publishes to crates.io on tag push with changelog validation.
 - [ ] Add binary release builds for common platforms (Linux x86_64/aarch64, macOS x86_64/aarch64, Windows x86_64) via `cargo-dist` or explicit cross-compilation.
 - [ ] Add `cargo-audit` to CI for security advisory checks beyond `cargo-deny`.
 - [ ] Add integration coverage that runs the tool against a known external workspace, not only local fixtures.
 - [ ] Decide whether `cargo-semver-checks` is worth the complexity for a primarily CLI-focused crate.
-- [ ] Add dependabot or renovate for regular dependency update pressure.
 
 Exit criteria:
 
 - [ ] Tagging a release can produce a publishable crate and binary artifacts without ad hoc shell work.
-- [ ] CI catches platform, MSRV, and dogfood regressions before release day.
-- [ ] Security and maintenance automation are good enough that a v0.2 release does not depend on heroic memory.
+- [x] CI catches platform, MSRV, and dogfood regressions before release day.
+- [ ] Security and maintenance automation are good enough that future releases do not depend on heroic memory.
 
 ### Phase 9 - ecosystem integration and interoperability
 
@@ -564,7 +561,7 @@ Work to do:
 
 - [ ] Define and document the stability contract for 1.0 (what is SemVer-stable and what is not).
 - [ ] Establish a deprecation policy for CLI flags and output schema changes.
-- [ ] Set up issue templates and PR templates on GitHub.
+- [x] Set up issue templates and PR templates on GitHub.
 - [x] Add a security policy (`SECURITY.md`) with a responsible disclosure process.
 - [ ] Decide whether the crate should expose a library API or remain CLI-only through 1.0.
 - [ ] Plan and execute early outreach: blog post, forum post, release announcement, or equivalent.
@@ -582,7 +579,7 @@ Exit criteria:
 
 Status: planned
 
-Goal: extend compatibility analysis with supply-chain trust signals. cargo-compatible already knows your dependency graph — the natural next step is assessing whether those dependencies are trustworthy, not just version-compatible.
+Goal: extend compatibility analysis with supply-chain trust signals. cargo-compatible already knows your dependency graph -- the natural next step is assessing whether those dependencies are trustworthy, not just version-compatible.
 
 Work to do:
 
@@ -654,9 +651,9 @@ These are the live judgment calls that shape the next few phases:
 |----------|-------|--------|
 | ~~What benchmark corpus best approximates real operator pain without making the suite flaky or network-dependent?~~ | 6 | **Resolved**: seven benchmark groups cover metadata, scan, copy, resolve, dense graphs, mixed versions, and fixtures; registry-backed corpus deferred until real adoption feedback arrives. |
 | ~~Is temp-workspace copy time a release blocker in practice, or only an aesthetic concern until larger repos are measured?~~ | 6 | **Resolved**: measured at 20–25% of resolve time; not a blocker. The safety model is justified. |
-| Should JSON output be versioned in v0.2, or explicitly labeled unstable until more CI-facing features land? | 7 | Downstream contract and release messaging |
+| Should JSON output be formally versioned, or explicitly labeled unstable until more CI-facing features land? | 7 | Downstream contract and release messaging |
 | How much package-identity disambiguation is enough before always showing source labels by default? | 7 | Human-report readability vs verbosity |
-| Should v0.2 ship as crate-only, or does it need binary artifacts on day one to feel credible? | 8 | Release automation scope |
+| Should future releases ship binary artifacts alongside the crate, or stay crate-only? | 8 | Release automation scope |
 | What is the right exit-code contract for CI usage? (0/1/2? configurable?) | 9 | CI integration contract |
 | Should config file support land before or after CI-oriented outputs like SARIF/JUnit? | 9 | Feature ordering and adoption |
 | Should the tool expose a library API or stay CLI-only through 1.0? | 12 | API surface commitment |
@@ -668,18 +665,19 @@ These are the live judgment calls that shape the next few phases:
 
 1. Start Phase 7 by auditing every README command example against the current CLI and fixing or deleting aspirational content.
 2. Audit `--help` text for every subcommand so flags, defaults, and safety notes match actual behavior.
-3. Decide whether v0.2 is primarily a "measured core" release, a "CI integration" release, or a hybrid — then cut scope accordingly.
+3. Decide scope for the next release beyond v1.0.0 based on operator feedback and adoption.
 
 ---
 
 ## Progress log
 
+- 2026-03-25: Released v1.0.0 and published to crates.io. Production release promotion. Added Phase 13 supply-chain trust extensions roadmap. Added issue templates, PR template, dependabot configuration. Removed auto-publish release workflow (manual publish preferred). All quality gates pass.
 - 2026-03-24: Released v0.2.0 and published to crates.io. Version bump, changelog update, git tag v0.2.0, pushed to GitHub and Codeberg, `cargo publish` successful. All quality gates passed: `cargo build`, `cargo test` (51 tests), `cargo clippy`, `cargo fmt --check`.
-- 2026-03-24: Completed Phase 6 — performance realism and benchmark expansion. Expanded `large_workspace_resolver` bench harness from one benchmark group (resolve-only, synthetic linear chain) to seven groups: `resolve_end_to_end`, `scan_analysis`, `metadata_load`, `temp_workspace_copy`, `dense_graph_scan`, `mixed_version_scan`, and `fixture_scan`. Added dense-graph and mixed-version workspace generators. Added fixture-derived scan benchmarks using four real test fixtures. Phase-separated timing proves metadata loading (external `cargo metadata`) dominates resolve cost at 50–76 ms; temp-workspace copy is 18–41 ms (20–25% of resolve); scan analysis itself is 1.5–40 ms depending on scale. No memory pressure observed at 96 members. CI performance thresholds deferred due to ~5–10% benchmark variance at 10-sample level. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (all pass), `cargo bench --bench large_workspace_resolver` (all seven groups complete). Next: Phase 7 — release polish and operator trust cleanup.
+- 2026-03-24: Completed Phase 6 -- performance realism and benchmark expansion. Expanded `large_workspace_resolver` bench harness from one benchmark group (resolve-only, synthetic linear chain) to seven groups: `resolve_end_to_end`, `scan_analysis`, `metadata_load`, `temp_workspace_copy`, `dense_graph_scan`, `mixed_version_scan`, and `fixture_scan`. Added dense-graph and mixed-version workspace generators. Added fixture-derived scan benchmarks using four real test fixtures. Phase-separated timing proves metadata loading (external `cargo metadata`) dominates resolve cost at 50–76 ms; temp-workspace copy is 18–41 ms (20–25% of resolve); scan analysis itself is 1.5–40 ms depending on scale. No memory pressure observed at 96 members. CI performance thresholds deferred due to ~5–10% benchmark variance at 10-sample level. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (all pass), `cargo bench --bench large_workspace_resolver` (all seven groups complete). Next: Phase 7 -- release polish and operator trust cleanup.
 - 2026-03-24: Fixed the active CI failures by making integration fixtures and snapshot sanitization cross-platform, replacing Windows-hostile path serialization in local-registry and git fixture setup, and correcting the repo's declared MSRV from 1.74 to 1.89 to match the current dependency floor (`cargo_metadata 0.22.0`, `cargo-platform 0.3.2`, `home 0.5.12`, and `smol_str 0.3.6` no longer support 1.74). Verified with: `cargo test --locked`, `cargo +1.89.0 check --all-features --locked`, `cargo +1.88.0 check --all-features --locked` (expected failure), `~/go/bin/actionlint .github/workflows/ci.yml`. Next: keep the dependency floor explicit in release notes when upgrading crates that can silently raise MSRV.
 - 2026-03-24: Reframed `BUILD.md` as a live execution manual for the post-hardening stretch, shifting the top-line narrative from "Phases 4–5 complete" to a concrete Phase 6–8 kickoff with measurable next work, updated open questions and risks to reflect the actual remaining decisions, and tightened README/AGENTS status wording so the repo no longer reads like a finished-correctness snapshot. Verified with: `rg -n "Current execution window|Phase 6|Phase 7|Status:" BUILD.md README.md AGENTS.md`, `git diff --check`. Next: start Phase 6 with fixture-derived benchmarks and baseline capture.
 - 2026-03-22: Completed Phases 4 and 5. Phase 4: threaded workspace root through `ExplainReport` so `render_explain_human` and `render_explain_markdown` use the actual workspace root instead of `Path::new(".")` for path-relative package labels; confirmed dependency-path chain labels are already properly disambiguated via `colliding_base_labels` + `unique_package_label` in `shortest_paths_from_root`. Phase 5: added `lockfile-improvement` fixture with a 3-version local registry (1.1.0 compatible, 1.2.0 incompatible, 1.3.0 compatible); fixed `run_resolution_command` to use `cargo update` without `--workspace` so dependencies actually get updated to newer compatible versions; added integration tests verifying scan reports 1.2.0 as incompatible and resolve upgrades 1.2.0 → 1.3.0 with non-empty `improved_packages` and empty `remaining_blockers`. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (50 tests pass), `cargo nextest run` (50 tests pass). All snapshots unchanged.
-- 2026-03-22: Closed out Phases 4 and 5. Threaded workspace root through `ExplainReport` so explain rendering uses workspace-relative path labels instead of `Path::new(".")`. Fixed `run_resolution_command` to use `cargo update` without `--workspace` — the `--workspace` flag limited updates to workspace member entries only, preventing dependency upgrades in the temp-copy resolution flow. Added a `lockfile-improvement` fixture with a local registry containing three versions of `compat-demo` (1.1.0 compatible, 1.2.0 incompatible, 1.3.0 compatible) to exercise the true lockfile-only improvement path end to end. Refactored `stage_local_registry_fixture` into a reusable `stage_local_registry_fixture_with_packages` helper. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (50 tests pass), `cargo nextest run` (50 pass), `~/.cargo/bin/cargo-deny check`, `cargo bench --bench large_workspace_resolver --no-run`. Next: begin Phase 6 (benchmark expansion) and Phase 7 (release polish).
+- 2026-03-22: Closed out Phases 4 and 5. Threaded workspace root through `ExplainReport` so explain rendering uses workspace-relative path labels instead of `Path::new(".")`. Fixed `run_resolution_command` to use `cargo update` without `--workspace` -- the `--workspace` flag limited updates to workspace member entries only, preventing dependency upgrades in the temp-copy resolution flow. Added a `lockfile-improvement` fixture with a local registry containing three versions of `compat-demo` (1.1.0 compatible, 1.2.0 incompatible, 1.3.0 compatible) to exercise the true lockfile-only improvement path end to end. Refactored `stage_local_registry_fixture` into a reusable `stage_local_registry_fixture_with_packages` helper. Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (50 tests pass), `cargo nextest run` (50 pass), `~/.cargo/bin/cargo-deny check`, `cargo bench --bench large_workspace_resolver --no-run`. Next: begin Phase 6 (benchmark expansion) and Phase 7 (release polish).
 - 2026-03-22: Added MSRV badge to README, unit tests for `classify_package`/`strongest_status`/`parse_version_display`, integration tests for `apply-lock` no-op, `scan` incompatible reporting (human and JSON), `explain` JSON blocker classification, and `resolve --write-report` with JSON format. Improved panic message in `parse_version_display` to include the invalid value. Corrected BUILD.md risk register to reflect that MSRV is declared and enforced in CI (1.74 job + cross-platform matrix + dogfood gate already present). Verified with: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test` (48 tests pass). Next: continue identity-disambiguation and lockfile-improvement work.
 - 2026-03-22: Restored the fuller `BUILD.md` execution manual after the docs-tightening regression, refreshed `README.md` to stay concise but truthful, and re-synced the public docs with current package-selection, write-report, local-registry, and package-identity behavior. Verified with: `git diff --check`, `cargo run -- --help`. Next: keep the docs aligned while finishing the remaining identity-disambiguation and lockfile-improvement work.
 - 2026-03-22: Added source-aware human report labels for resolved, workspace, and path packages, taught manifest suggestions to read a crates.io local-registry replacement from workspace `.cargo/config.toml`, and added deterministic end-to-end `suggest-manifest --write-manifests` coverage via a local-registry fixture. Verified with: `cargo fmt --check`, `cargo test report::tests:: --lib`, `cargo test --test integration_cli suggest_manifest_write_manifests_uses_local_registry_fixture_end_to_end`, `cargo test --test integration_cli explain_path_dep`, `cargo test --test integration_cli scan_mixed_workspace_human_snapshot`. Stop point: a true lockfile-only improvement fixture is still missing because the current `cargo update --workspace` temp-copy flow preserves existing lockfile selections; that needs a deliberate repro or strategy change, not guesswork. Next: extend package-identity disambiguation into dependency-path chains and identify a credible lockfile-only improvement fixture.
