@@ -18,6 +18,36 @@ fn bin() -> Command {
     Command::cargo_bin("cargo-compatible").expect("binary should build")
 }
 
+#[test]
+fn top_level_help_mentions_core_workflow() {
+    let output = bin()
+        .arg("--help")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let stdout = String::from_utf8(output).unwrap();
+
+    assert!(stdout.contains("Audit a workspace's resolved dependency graph"));
+    assert!(stdout.contains("cargo compatible resolve --write-candidate"));
+}
+
+#[test]
+fn resolve_help_mentions_temp_workspace_safety() {
+    let output = bin()
+        .args(["resolve", "--help"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let stdout = String::from_utf8(output).unwrap();
+
+    assert!(stdout.contains("temporary workspace copy"));
+    assert!(stdout.contains("Write the candidate Cargo.lock"));
+}
+
 struct LocalRegistryFixture {
     _temp: TempDir,
     workspace_root: PathBuf,

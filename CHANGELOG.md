@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Removed the deprecated `BUILD.md` handoff doc and consolidated current-state guidance into `README.md`, `AGENTS.md`, and `CONTRIBUTING.md`.
+- Hardened CLI help text so command descriptions, safety notes, and examples reflect the current behavior more explicitly.
+- Clarified documentation around JSON output stability and near-term release hygiene work.
+
 ## [1.0.0] - 2026-03-25
 
 ### Changed
@@ -29,7 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-platform CI matrix (Linux, macOS, Windows).
 - MSRV verification in CI (Rust 1.89).
 - Dogfood CI job that runs the tool against its own workspace.
-- Release workflow with binary builds for 5 targets and crates.io publish.
 - `CONTRIBUTING.md` with development setup, coding standards, and PR process.
 - `SECURITY.md` with vulnerability reporting process.
 - `.editorconfig` for editor consistency.
@@ -54,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - Documented that landing a true lockfile-only improvement fixture needs a different Cargo invocation strategy because stable `cargo update --workspace` preserves valid existing lockfile selections.
-- Expanded `BUILD.md` with phases 8-12 covering CI/CD hardening, ecosystem integration, advanced analysis, documentation, and 1.0 roadmap.
+- Expanded the project roadmap notes with phases 8-12 covering CI/CD hardening, ecosystem integration, advanced analysis, documentation, and 1.0 roadmap.
 - Overhauled `README.md` with badges, comparison table, and improved onboarding flow.
 
 ## [0.1.0] - 2026-03-19

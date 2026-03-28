@@ -122,7 +122,7 @@ Test fixtures live in `tests/fixtures/`. Each fixture is a minimal Cargo workspa
 1. **Fork and branch**: Create a feature branch from `main`.
 2. **Pass the gate**: Run the full quality gate locally before pushing.
 3. **Small, focused changes**: One logical change per PR. If you're fixing a bug and adding a feature, that's two PRs.
-4. **Update docs**: If you change command behavior, output format, or semantics, update `README.md`, `AGENTS.md`, and `BUILD.md` in the same PR.
+4. **Update docs**: If you change command behavior, output format, or semantics, update `README.md`, `AGENTS.md`, and any relevant changelog or help text in the same PR.
 5. **Update snapshots**: If output changes, run `cargo insta review` and include the updated snapshots.
 6. **Write a clear description**: Explain what changed, why, and how to verify it.
 

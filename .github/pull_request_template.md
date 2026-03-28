@@ -16,4 +16,4 @@ Key implementation details, if not obvious from the diff.
 - [ ] `cargo clippy --all-targets --all-features -- -D warnings` passes
 - [ ] `cargo nextest run` passes
 - [ ] Snapshots updated if output changed (`cargo insta review`)
-- [ ] Docs updated if behavior changed (README, AGENTS.md, BUILD.md)
+- [ ] Docs updated if behavior changed (README, AGENTS.md, changelog/help text as needed)

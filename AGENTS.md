@@ -1,6 +1,6 @@
 # Cargo Compatible Agent Notes
 
-This file is concise repo memory for future agents and developers. `BUILD.md` is the primary handoff document and should be read first.
+This file is concise repo memory for future agents and developers. Read `README.md` first for the public contract and current operator-facing workflow, then use this file for repo-specific implementation notes.
 
 ## Purpose
 
@@ -80,13 +80,20 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 cargo nextest run
-~/.cargo/bin/cargo-deny check
+cargo deny check
 cargo bench --bench large_workspace_resolver --no-run
 cargo run -- --help
 cargo run -- scan --manifest-path tests/fixtures/path-too-new/Cargo.toml
 cargo run -- explain too_new --manifest-path tests/fixtures/path-too-new/Cargo.toml
 cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.toml
 ```
+
+## Current Priorities
+
+- Keep CLI help text, README examples, and actual command behavior aligned.
+- Preserve the non-mutating-by-default safety contract in both docs and code.
+- Treat JSON output as useful but not yet separately versioned; avoid implying a stronger stability contract than the code and docs explicitly guarantee.
+- Prefer tightening trust, release hygiene, and operator clarity over broad new feature expansion.
 
 ## Current Gaps
 
@@ -99,7 +106,7 @@ cargo run -- suggest-manifest --manifest-path tests/fixtures/path-too-new/Cargo.
 
 ## Working Agreement
 
-- Keep `BUILD.md`, `README.md`, `CONTRIBUTING.md`, and this file aligned whenever command behavior, output schema, workflow guarantees, or repository structure change.
+- Keep `README.md`, `CONTRIBUTING.md`, and this file aligned whenever command behavior, output schema, workflow guarantees, or repository structure change.
 - Prefer updating fixture workspaces and snapshots when changing analysis or reporting behavior.
 - Treat the source of truth in this order:
   - `src/cli.rs`

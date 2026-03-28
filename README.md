@@ -6,7 +6,7 @@
 
 `cargo-compatible` is a Cargo subcommand that answers "does my resolved dependency graph fit the Rust version I care about?" It scans your lockfile, classifies every package as compatible, incompatible, or unknown, and offers a safe, incremental path to fix blockers -- lockfile changes first, manifest edits only when necessary.
 
-> **Status:** v1.0.0 production release. The full command surface (`scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`) ships with correctness hardening, write-path coverage, measured performance baselines, and CI with cross-platform, MSRV, and dogfood gates. See [BUILD.md](BUILD.md) for the full execution plan.
+> **Status:** v1.0.0 production release. The full command surface (`scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`) ships with correctness hardening, write-path coverage, measured performance baselines, and CI with cross-platform, MSRV, and dogfood gates. Near-term work is focused on docs/help polish, explicit machine-output contracts, and release automation cleanup.
 
 ## Why cargo-compatible?
 
@@ -40,7 +40,7 @@ The lockfile-first workflow matters: changing `Cargo.lock` is low-risk and rever
 ### From crates.io
 
 ```bash
-cargo install cargo-compatible
+cargo install cargo-compatible --locked
 ```
 
 After installation, use it as `cargo compatible`.
@@ -50,7 +50,7 @@ After installation, use it as `cargo compatible`.
 ```bash
 git clone https://github.com/dunamismax/cargo-compatible.git
 cd cargo-compatible
-cargo install --path .
+cargo install --path . --locked
 ```
 
 ## Quick start
@@ -137,7 +137,7 @@ This tool is designed to be safe to run in any context:
 All commands support `--format {human|json|markdown}`:
 
 - **human** (default): readable terminal output with source labels and dependency paths
-- **json**: machine-readable, suitable for CI integration and downstream tooling
+- **json**: machine-readable, suitable for CI integration and downstream tooling; the field set is useful today but not yet versioned as a separate stability contract, so pin the tool version if you depend on it programmatically
 - **markdown**: report-ready format for PRs, issues, or documentation
 
 ## Architecture
@@ -177,7 +177,6 @@ All commands support `--format {human|json|markdown}`:
 
 ```text
 .
-├── BUILD.md             # execution manual, phase tracking, verification ledger
 ├── README.md             # public-facing project description, honest status
 ├── AGENTS.md             # concise repo memory for agents and contributors
 ├── CONTRIBUTING.md          # development setup, coding standards, PR process
@@ -225,25 +224,14 @@ All commands support `--format {human|json|markdown}`:
 - Resolver guidance for mixed or virtual workspaces is explanatory only -- no auto-edit of `workspace.resolver`
 - Path and git dependencies are analyzed but don't receive downgrade suggestions
 
-## Roadmap
+## Near-term priorities
 
-| Phase | Name | Status |
-|-------|------|--------|
-| 0 | Repo charter and verification baseline | **Done** |
-| 1 | Core command surface and analysis engine | **Done** |
-| 2 | Safe resolution and manifest-suggestion workflow | **Done** |
-| 3 | Reporting, fixtures, CI, and benchmark baseline | **Done** |
-| 4 | Correctness hardening (selection, explain, report) | **Done** |
-| 5 | Write-path and mutating-flow coverage | **Done** |
-| 6 | Performance realism and benchmark expansion | **Done** |
-| 7 | Release polish and operator trust cleanup | **Next** |
-| 8 | CI/CD hardening and release automation | Planned |
-| 9 | Ecosystem integration and interoperability | Planned |
-| 10 | Advanced analysis and resolution intelligence | Planned |
-| 11 | Documentation, examples, and onboarding | Planned |
-| 12 | Community readiness and 1.0 roadmap | Planned |
+Current work is intentionally narrower than the original multi-phase planning doc. The next high-value passes are:
 
-See [BUILD.md](BUILD.md) for the full phase breakdown with goals, exit criteria, risks, and decisions.
+- **Help and docs polish**: keep README examples, `--help` text, and emitted reports aligned with the real CLI behavior.
+- **Release hygiene**: tighten the path from a tagged commit to a publishable crate and reproducible binary artifacts.
+- **Machine-output trust**: document the JSON contract more explicitly before treating it as a stable integration surface.
+- **Operator-focused examples**: keep adding short, realistic examples and troubleshooting guidance instead of aspirational roadmap prose.
 
 ## Design principles
 
@@ -272,7 +260,7 @@ Tracing is opt-in:
 RUST_LOG=cargo_compatible=debug cargo compatible scan --workspace
 ```
 
-See [`BUILD.md`](BUILD.md) for the full development manual, phase tracking, and verification ledger. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup and PR guidelines.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup and PR guidelines. Repo-specific maintainer notes live in [`AGENTS.md`](AGENTS.md).
 
 ## Contributing
 

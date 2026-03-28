@@ -15,7 +15,6 @@ exclude = [
     "tests/",
     "benches/",
     ".github/",
-    "BUILD.md",
     "AGENTS.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
