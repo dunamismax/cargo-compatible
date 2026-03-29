@@ -6,7 +6,7 @@
 
 `cargo-compatible` is a Cargo subcommand that answers "does my resolved dependency graph fit the Rust version I care about?" It scans your lockfile, classifies every package as compatible, incompatible, or unknown, and offers a safe, incremental path to fix blockers -- lockfile changes first, manifest edits only when necessary.
 
-> **Status:** v1.0.0 production release. The full command surface (`scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`) ships with correctness hardening, write-path coverage, measured performance baselines, and CI with cross-platform, MSRV, and dogfood gates. Near-term work is focused on docs/help polish, explicit machine-output contracts, and release automation cleanup.
+> **Status:** v1.0.1 maintenance release. The full command surface (`scan`, `resolve`, `apply-lock`, `suggest-manifest`, `explain`) remains stable and production-ready; this patch sharpens help text, cleans up release/docs workflow, and keeps the lockfile-first safety model front and center while near-term work stays focused on explicit machine-output contracts and operator clarity.
 
 ## Why cargo-compatible?
 

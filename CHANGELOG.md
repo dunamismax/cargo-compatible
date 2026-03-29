@@ -7,11 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-03-29
+
 ### Changed
 
 - Removed the deprecated `BUILD.md` handoff doc and consolidated current-state guidance into `README.md`, `AGENTS.md`, and `CONTRIBUTING.md`.
 - Hardened CLI help text so command descriptions, safety notes, and examples reflect the current behavior more explicitly.
 - Clarified documentation around JSON output stability and near-term release hygiene work.
+- Dropped the stale automated GitHub release and crates.io publish workflow in favor of manual release hygiene.
 
 ## [1.0.0] - 2026-03-25
 
@@ -78,7 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI integration tests and snapshot coverage.
 - CI pipeline with fmt, clippy, nextest, and cargo-deny.
 
-[Unreleased]: https://github.com/dunamismax/cargo-compatible/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/dunamismax/cargo-compatible/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/dunamismax/cargo-compatible/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/dunamismax/cargo-compatible/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/dunamismax/cargo-compatible/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dunamismax/cargo-compatible/releases/tag/v0.1.0
